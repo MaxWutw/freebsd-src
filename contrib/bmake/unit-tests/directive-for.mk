@@ -1,4 +1,4 @@
-# $NetBSD: directive-for.mk,v 1.22 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: directive-for.mk,v 1.32 2025/07/01 04:24:20 rillig Exp $
 #
 # Tests for the .for directive.
 #
@@ -25,7 +25,7 @@ NUMBERS+=	${num}
 
 
 # The .for loop also works for multiple iteration variables.
-# This is something that the modifier :@ cannot do.
+# This is something that the modifier :@ cannot do as easily.
 .for name value in VARNAME value NAME2 value2
 ${name}=	${value}
 .endfor
@@ -132,44 +132,44 @@ EXPANSION${plus}=	value
 # variable values have been replaced with expressions of the form ${:U...},
 # which are not interpreted as code anymore.
 .for path in a:\ a:\file.txt d:\\ d:\\file.txt
+# expect+3: a:\ a:\file.txt
+# expect+2: d:\\
+# expect+1: d:\\file.txt
 .  info ${path}
 .endfor
-# expect-2: a:\ a:\file.txt
-# expect-3: d:\\
-# expect-4: d:\\file.txt
 
 
 # Ensure that braces and parentheses are properly escaped by the .for loop.
 # Each line must print the same word 3 times.
 # See ForLoop_SubstBody.
 .for v in ( [ { ) ] } (()) [[]] {{}} )( ][ }{
+# expect+12: ( ( (
+# expect+11: [ [ [
+# expect+10: { { {
+# expect+9: ) ) )
+# expect+8: ] ] ]
+# expect+7: } } }
+# expect+6: (()) (()) (())
+# expect+5: [[]] [[]] [[]]
+# expect+4: {{}} {{}} {{}}
+# expect+3: )( )( )(
+# expect+2: ][ ][ ][
+# expect+1: }{ }{ }{
 .  info $v ${v} $(v)
 .endfor
-# expect-02: ( ( (
-# expect-03: [ [ [
-# expect-04: { { {
-# expect-05: ) ) )
-# expect-06: ] ] ]
-# expect-07: } } }
-# expect-08: (()) (()) (())
-# expect-09: [[]] [[]] [[]]
-# expect-10: {{}} {{}} {{}}
-# expect-11: )( )( )(
-# expect-12: ][ ][ ][
-# expect-13: }{ }{ }{
 
 # Before 2023-05-09, the variable names could contain arbitrary characters,
 # except for whitespace, allowing for creative side effects, as usual for
 # arbitrary code injection.
 var=	outer
-# expect+1: invalid character ':' in .for loop variable name
+# expect+1: Invalid character ":" in .for loop variable name
 .for var:Q in value "quoted"
 .  info <${var}> <${var:Q}> <${var:Q:Q}>
 .endfor
 
 # Before 2023-05-09, when variable names could contain '$', the short
 # expression '$$' was preserved, the long expressions were substituted.
-# expect+1: invalid character '$' in .for loop variable name
+# expect+1: Invalid character "$" in .for loop variable name
 .for $ in value
 .  info <$$> <${$}> <$($)>
 .endfor
@@ -181,7 +181,7 @@ var=	outer
 # possibility, therefore the variable names are restricted to using harmless
 # characters only.
 INDIRECT=	direct
-# expect+1: invalid character '$' in .for loop variable name
+# expect+1: Invalid character "$" in .for loop variable name
 .for $(INDIRECT) in value
 # If the variable name could be chosen dynamically, the iteration variable
 # might have been 'direct', thereby expanding the expression '${direct}'.
@@ -189,19 +189,23 @@ INDIRECT=	direct
 .endfor
 
 
-# XXX: A parse error or evaluation error in the items of the .for loop
-# should skip the whole loop.  As of 2023-05-09, the loop is expanded as
-# usual.
-# expect+1: Unknown modifier "Z"
-.for var in word1 ${:Uword2:Z} word3
-.  info XXX: Not reached ${var}
+# Regular global variables and the "variables" from the .for loop don't
+# interfere with each other.  In the following snippet, the variable 'DIRECT'
+# is used both as a global variable, as well as an iteration variable in the
+# .for loop.  The expression '${INDIRECT}' refers to the global variable, not
+# to the one from the .for loop.
+DIRECT=		global
+INDIRECT=	${DIRECT}
+.for DIRECT in iteration
+.  if "${DIRECT} ${INDIRECT}" != "iteration global"
+.    error
+.  endif
 .endfor
-# expect-2: XXX: Not reached word1
-# expect-3: XXX: Not reached word3
 
 
 # An empty list of variables to the left of the 'in' is a parse error.
-.for in value			# expect+0: no iteration variables in for
+# expect+1: Missing iteration variables in .for loop
+.for in value
 .  error
 .endfor
 
@@ -227,7 +231,8 @@ INDIRECT=	direct
 # is processed.
 .for var in value
 .  if 0
-.endfor				# expect+0: 1 open conditional
+.endfor
+# expect-1: 1 open conditional
 
 # If there are no iteration values, the loop body is not processed, and the
 # check for mismatched conditionals is not performed.
@@ -243,8 +248,10 @@ INDIRECT=	direct
 .if 0
 .  for var in value		# does not need a corresponding .endfor
 .endif
-.endfor				# expect+0: for-less endfor
-.endif				# expect+0: if-less endif
+# expect+1: for-less endfor
+.endfor
+# expect+1: if-less endif
+.endif
 
 
 # When a .for without the corresponding .endfor occurs in an active branch of
@@ -252,7 +259,8 @@ INDIRECT=	direct
 # without looking at any other directives.
 .if 1
 .  for var in value
-.    endif			# expect+0: if-less endif
+# expect+1: if-less endif
+.    endif
 .  endfor			# no 'for-less endfor'
 .endif				# no 'if-less endif'
 
@@ -300,6 +308,6 @@ INDIRECT=	direct
 # Back then, the .newline variable didn't exist, therefore it was unlikely
 # that a newline ever occurred.
 .for var in a${.newline}b${.newline}c
+# expect+1: newline-item=(a)
 .  info newline-item=(${var})
 .endfor
-# expect-2: newline-item=(a)

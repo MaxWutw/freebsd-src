@@ -375,8 +375,10 @@ show_lifetime(struct ifa_cacheinfo *ci)
 	vl = (ci->ifa_valid == ND6_INFINITE_LIFETIME) ? 0 : ci->ifa_valid;
 
 	clock_gettime(CLOCK_MONOTONIC_FAST, &now);
-	print_lifetime("pltime", pl + now.tv_sec, &now);
-	print_lifetime("vltime", vl + now.tv_sec, &now);
+	print_lifetime("pltime",
+	    pl + (ip6lifetime ? ci->tstamp / 1000 : now.tv_sec), &now);
+	print_lifetime("vltime",
+	    vl + (ip6lifetime ? ci->tstamp / 1000 : now.tv_sec), &now);
 }
 
 static void
@@ -759,7 +761,7 @@ static struct afswtch af_inet6 = {
 #else
 	.af_difaddr	= NL_RTM_DELADDR,
 	.af_aifaddr	= NL_RTM_NEWADDR,
-	.af_ridreq	= &in6_add,
+	.af_ridreq	= &in6_del,
 	.af_addreq	= &in6_add,
 	.af_exec	= in6_exec_nl,
 #endif

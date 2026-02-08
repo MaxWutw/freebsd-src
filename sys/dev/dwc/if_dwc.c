@@ -523,7 +523,7 @@ dwc_enable_csum_offload(struct dwc_softc *sc)
 
 	DWC_ASSERT_LOCKED(sc);
 	reg = READ4(sc, MAC_CONFIGURATION);
-	if ((if_getcapenable(sc->ifp) & IFCAP_RXCSUM) != 0)
+	if ((if_getcapenable(sc->ifp) & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6)) != 0)
 		reg |= CONF_IPC;
 	else
 		reg &= ~CONF_IPC;
@@ -685,7 +685,7 @@ dwc_setup_txbuf(struct dwc_softc *sc, int idx, struct mbuf **mp)
 	struct bus_dma_segment segs[TX_MAP_MAX_SEGS];
 	int error, nsegs;
 	struct mbuf * m;
-	uint32_t flags = 0;
+	uint32_t flags;
 	int i;
 	int first, last;
 
@@ -713,19 +713,12 @@ dwc_setup_txbuf(struct dwc_softc *sc, int idx, struct mbuf **mp)
 
 	m = *mp;
 
-	if ((m->m_pkthdr.csum_flags & CSUM_IP) != 0) {
-		if ((m->m_pkthdr.csum_flags & (CSUM_TCP|CSUM_UDP)) != 0) {
-			if (sc->mactype != DWC_GMAC_EXT_DESC)
-				flags = NTDESC1_CIC_FULL;
-			else
-				flags = ETDESC0_CIC_FULL;
-		} else {
-			if (sc->mactype != DWC_GMAC_EXT_DESC)
-				flags = NTDESC1_CIC_HDR;
-			else
-				flags = ETDESC0_CIC_HDR;
-		}
-	}
+	if ((m->m_pkthdr.csum_flags & (CSUM_DELAY_DATA | CSUM_DELAY_DATA_IPV6)) != 0)
+		flags = (sc->mactype != DWC_GMAC_EXT_DESC) ? NTDESC1_CIC_SEG : ETDESC0_CIC_SEG;
+	else if ((m->m_pkthdr.csum_flags & CSUM_IP) != 0)
+		flags = (sc->mactype != DWC_GMAC_EXT_DESC) ? NTDESC1_CIC_HDR : ETDESC0_CIC_HDR;
+	else
+		flags = (sc->mactype != DWC_GMAC_EXT_DESC) ? NTDESC1_CIC_NONE : ETDESC0_CIC_NONE;
 
 	bus_dmamap_sync(sc->txbuf_tag, sc->txbuf_map[idx].map,
 	    BUS_DMASYNC_PREWRITE);
@@ -861,7 +854,7 @@ dwc_rxfinish_one(struct dwc_softc *sc, struct dwc_hwdesc *desc,
 	m->m_len = len;
 	if_inc_counter(ifp, IFCOUNTER_IPACKETS, 1);
 
-	if ((if_getcapenable(ifp) & IFCAP_RXCSUM) != 0 &&
+	if ((if_getcapenable(ifp) & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6)) != 0 &&
 	  (rdesc0 & RDESC0_FT) != 0) {
 		m->m_pkthdr.csum_flags = CSUM_IP_CHECKED;
 		if ((rdesc0 & RDESC0_ICE) == 0)
@@ -1259,14 +1252,16 @@ dwc_ioctl(if_t ifp, u_long cmd, caddr_t data)
 			/* No work to do except acknowledge the change took */
 			if_togglecapenable(ifp, IFCAP_VLAN_MTU);
 		}
-		if (mask & IFCAP_RXCSUM)
-			if_togglecapenable(ifp, IFCAP_RXCSUM);
-		if (mask & IFCAP_TXCSUM)
+		if (mask & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6))
+			if_togglecapenable(ifp, IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6);
+		if (mask & IFCAP_TXCSUM) {
 			if_togglecapenable(ifp, IFCAP_TXCSUM);
-		if ((if_getcapenable(ifp) & IFCAP_TXCSUM) != 0)
-			if_sethwassistbits(ifp, CSUM_IP | CSUM_UDP | CSUM_TCP, 0);
-		else
-			if_sethwassistbits(ifp, 0, CSUM_IP | CSUM_UDP | CSUM_TCP);
+			if_togglehwassist(ifp, CSUM_IP | CSUM_DELAY_DATA);
+		}
+		if (mask & IFCAP_TXCSUM_IPV6) {
+			if_togglecapenable(ifp, IFCAP_TXCSUM_IPV6);
+			if_togglehwassist(ifp, CSUM_DELAY_DATA_IPV6);
+		}
 
 		if (if_getdrvflags(ifp) & IFF_DRV_RUNNING) {
 			DWC_LOCK(sc);
@@ -1735,8 +1730,8 @@ dwc_attach(device_t dev)
 	if_setinitfn(ifp, dwc_init);
 	if_setsendqlen(ifp, TX_MAP_COUNT - 1);
 	if_setsendqready(sc->ifp);
-	if_sethwassist(sc->ifp, CSUM_IP | CSUM_UDP | CSUM_TCP);
-	if_setcapabilities(sc->ifp, IFCAP_VLAN_MTU | IFCAP_HWCSUM);
+	if_sethwassist(sc->ifp, CSUM_IP | CSUM_DELAY_DATA | CSUM_DELAY_DATA_IPV6);
+	if_setcapabilities(sc->ifp, IFCAP_VLAN_MTU | IFCAP_HWCSUM | IFCAP_HWCSUM_IPV6);
 	if_setcapenable(sc->ifp, if_getcapabilities(sc->ifp));
 
 	/* Attach the mii driver. */

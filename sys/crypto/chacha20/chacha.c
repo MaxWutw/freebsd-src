@@ -51,8 +51,8 @@ typedef struct chacha_ctx chacha_ctx;
   a = PLUS(a,b); d = ROTATE(XOR(d,a), 8); \
   c = PLUS(c,d); b = ROTATE(XOR(b,c), 7);
 
-static const char sigma[16] = "expand 32-byte k";
-static const char tau[16] = "expand 16-byte k";
+static const char sigma[16] __nonstring = "expand 32-byte k";
+static const char tau[16] __nonstring = "expand 16-byte k";
 
 LOCAL void
 chacha_keysetup(chacha_ctx *x,const u8 *k,u32 kbits)
@@ -139,7 +139,7 @@ chacha_encrypt_bytes(chacha_ctx *x,const u8 *m,u8 *c,u32 bytes)
   for (;;) {
     if (bytes < 64) {
 #ifndef KEYSTREAM_ONLY
-      for (i = 0;i < bytes;++i) tmp[i] = m[i];
+      for (i = 0; i < bytes; ++i) tmp[i] = m[i];
       m = tmp;
 #endif
       ctarget = c;
@@ -161,7 +161,7 @@ chacha_encrypt_bytes(chacha_ctx *x,const u8 *m,u8 *c,u32 bytes)
     x13 = j13;
     x14 = j14;
     x15 = j15;
-    for (i = 20;i > 0;i -= 2) {
+    for (i = 20; i > 0; i -= 2) {
       QUARTERROUND( x0, x4, x8,x12)
       QUARTERROUND( x1, x5, x9,x13)
       QUARTERROUND( x2, x6,x10,x14)
@@ -241,7 +241,7 @@ chacha_encrypt_bytes(chacha_ctx *x,const u8 *m,u8 *c,u32 bytes)
 
     if (bytes <= 64) {
       if (bytes < 64) {
-        for (i = 0;i < bytes;++i) ctarget[i] = c[i];
+        for (i = 0; i < bytes; ++i) ctarget[i] = c[i];
       }
       x->input[12] = j12;
       x->input[13] = j13;

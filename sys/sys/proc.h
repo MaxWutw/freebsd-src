@@ -763,7 +763,7 @@ struct proc {
 	LIST_HEAD(, mqueue_notifier)	p_mqnotifier; /* (c) mqueue notifiers.*/
 	struct kdtrace_proc	*p_dtrace; /* (*) DTrace-specific data. */
 	struct cv	p_pwait;	/* (*) wait cv for exit/exec. */
-	uint64_t	p_prev_runtime;	/* (c) Resource usage accounting. */
+	uint64_t        p_spare;	/* Unused spare. */
 	struct racct	*p_racct;	/* (b) Resource accounting. */
 	int		p_throttled;	/* (c) Flag for racct pcpu throttling */
 	/*
@@ -807,7 +807,7 @@ struct proc {
 					   lock. */
 #define	P_CONTROLT	0x00000002	/* Has a controlling terminal. */
 #define	P_KPROC		0x00000004	/* Kernel process. */
-#define	P_UNUSED3	0x00000008	/* --available-- */
+#define	P_IDLEPROC	0x00000008	/* Container for system idle threads. */
 #define	P_PPWAIT	0x00000010	/* Parent is waiting for child to
 					   exec/exit. */
 #define	P_PROFIL	0x00000020	/* Has started profiling. */
@@ -1336,6 +1336,18 @@ td_get_sched(struct thread *td)
 {
 
 	return ((struct td_sched *)&td[1]);
+}
+
+static __inline void
+ruxreset(struct rusage_ext *rux)
+{
+	rux->rux_runtime = 0;
+	rux->rux_uticks = 0;
+	rux->rux_sticks = 0;
+	rux->rux_iticks = 0;
+	rux->rux_uu = 0;
+	rux->rux_su = 0;
+	rux->rux_tu = 0;
 }
 
 #define	PROC_ID_PID	0

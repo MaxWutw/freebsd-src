@@ -1,4 +1,4 @@
-# $NetBSD: var-op-expand.mk,v 1.18 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: var-op-expand.mk,v 1.25 2025/06/29 11:27:21 rillig Exp $
 #
 # Tests for the := variable assignment operator, which expands its
 # right-hand side.
@@ -20,9 +20,9 @@ VAR:=			value
 
 # When a ':=' assignment is performed, its right-hand side is evaluated and
 # expanded as far as possible.  Contrary to other situations, '$$' and
-# variable expressions based on undefined variables are preserved though.
+# expressions based on undefined variables are preserved though.
 #
-# Whether a variable expression is undefined or not is determined at the end
+# Whether an expression is undefined or not is determined at the end
 # of evaluating the expression.  The consequence is that ${:Ufallback} expands
 # to "fallback"; initially this expression is undefined since it is based on
 # the variable named "", which is guaranteed to be never defined, but at the
@@ -270,23 +270,26 @@ later=	lowercase-value
 .undef later
 INDIRECT:=	${LATER:S,value,replaced,} OK ${LATER:value=sysv}
 indirect:=	${INDIRECT:tl}
-# expect+1: Unknown modifier "s,value,replaced,"
+# expect+1: Unknown modifier ":s,value,replaced,"
 .if ${indirect} != " ok "
 .  error
 .else
-# expect+1: warning: XXX Neither branch should be taken.
-.  warning	XXX Neither branch should be taken.
+.  error
 .endif
 LATER=	uppercase-value
 later=	lowercase-value
-# expect+1: Unknown modifier "s,value,replaced,"
+# expect+1: Unknown modifier ":s,value,replaced,"
 .if ${indirect} != "uppercase-replaced ok uppercase-sysv"
-# expect+1: warning: XXX Neither branch should be taken.
-.  warning	XXX Neither branch should be taken.
+.  error
 .else
 .  error
 .endif
 
 
-all:
-	@:;
+# FIXME: The expression is evaluated twice, for no obvious reason.
+# expect+5: Bad condition
+# expect+4: Unknown modifier ":Z1"
+# expect+3: Unknown modifier ":Z2"
+# expect+2: Unknown modifier ":Z1"
+# expect+1: Unknown modifier ":Z2"
+_:=	${ < 0 :?${:Z1}:${:Z2}}

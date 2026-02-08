@@ -293,10 +293,8 @@ kern_do_statfs(struct thread *td, struct mount *mp, struct statfs *buf)
 	error = VFS_STATFS(mp, buf);
 	if (error != 0)
 		goto out;
-	if (priv_check_cred_vfs_generation(td->td_ucred)) {
-		buf->f_fsid.val[0] = buf->f_fsid.val[1] = 0;
+	if (priv_check_cred_vfs_generation(td->td_ucred))
 		prison_enforce_statfs(td->td_ucred, mp, buf);
-	}
 out:
 	vfs_unbusy(mp);
 	return (error);
@@ -548,7 +546,6 @@ restart:
 			sptmp = malloc(sizeof(struct statfs), M_STATFS,
 			    M_WAITOK);
 			*sptmp = *sp;
-			sptmp->f_fsid.val[0] = sptmp->f_fsid.val[1] = 0;
 			prison_enforce_statfs(td->td_ucred, mp, sptmp);
 			sp = sptmp;
 		} else
@@ -2174,10 +2171,10 @@ kern_accessat(struct thread *td, int fd, const char *path,
 	cred = td->td_ucred;
 	if ((flag & AT_EACCESS) == 0 &&
 	    ((cred->cr_uid != cred->cr_ruid ||
-	    cred->cr_rgid != cred->cr_groups[0]))) {
+	    cred->cr_rgid != cred->cr_gid))) {
 		usecred = crdup(cred);
 		usecred->cr_uid = cred->cr_ruid;
-		usecred->cr_groups[0] = cred->cr_rgid;
+		usecred->cr_gid = cred->cr_rgid;
 		td->td_ucred = usecred;
 	} else
 		usecred = cred;

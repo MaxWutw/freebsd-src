@@ -208,11 +208,13 @@ __DEFAULT_NO_OPTIONS = \
     DTRACE_TESTS \
     EXPERIMENTAL \
     HESIOD \
+    IPFILTER_IPFS \
     LOADER_VERBOSE \
     LOADER_VERIEXEC_PASS_MANIFEST \
     LLVM_ASSERTIONS \
     LLVM_BINUTILS \
     LLVM_FULL_DEBUGINFO \
+    LLVM_LINK_STATIC_LIBRARIES \
     OFED_EXTRA \
     OPENLDAP \
     RPCBIND_WARMSTART_SUPPORT \
@@ -368,6 +370,10 @@ BROKEN_OPTIONS+= OFED
 .if ${MACHINE} == "host" && ${MK_host_egacy} == "yes"
 # we cannot expect tests to work
 BROKEN_OPTIONS+= TESTS
+.endif
+
+.if ${__T} != "amd64"
+BROKEN_OPTIONS+=BHYVE_SNAPSHOT
 .endif
 
 .-include <site.src.opts.mk>

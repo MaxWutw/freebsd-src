@@ -512,13 +512,13 @@ parse_cmdline () {
 			if [ $# -eq 1 ]; then usage; fi; shift
 			config_KeyPrint $1 || usage
 			;;
-		-s)
-			if [ $# -eq 1 ]; then usage; fi; shift
-			config_ServerName $1 || usage
-			;;
 		-r)
 			if [ $# -eq 1 ]; then usage; fi; shift
 			config_TargetRelease $1 || usage
+			;;
+		-s)
+			if [ $# -eq 1 ]; then usage; fi; shift
+			config_ServerName $1 || usage
 			;;
 		-t)
 			if [ $# -eq 1 ]; then usage; fi; shift
@@ -3143,8 +3143,8 @@ Kernel updates have been installed.  Please reboot and run
 			cat <<-EOF
 
 Completing this upgrade requires removing old shared object files.
-Please rebuild all installed 3rd party software (e.g., programs
-installed from the ports tree) and then run
+Please upgrade or rebuild all installed 3rd party software (e.g.,
+programs installed with pkg or from the ports tree) and then run
 '`basename $0` [options] install' again to finish installing updates.
 			EOF
 			rm newfiles

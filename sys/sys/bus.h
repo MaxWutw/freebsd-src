@@ -617,6 +617,48 @@ bus_alloc_resource_anywhere(device_t dev, int type, int *rid,
 	return (bus_alloc_resource(dev, type, rid, 0, ~0, count, flags));
 }
 
+/* Compat shims for bus_alloc_resource API. */
+static __inline struct resource *
+bus_alloc_resource_const(device_t dev, int type, int rid, rman_res_t start,
+    rman_res_t end, rman_res_t count, u_int flags)
+{
+	return (bus_alloc_resource(dev, type, &rid, start, end, count, flags));
+}
+
+static __inline struct resource *
+bus_alloc_resource_any_const(device_t dev, int type, int rid, u_int flags)
+{
+	return (bus_alloc_resource(dev, type, &rid, 0, ~0, 1, flags));
+}
+
+static __inline struct resource *
+bus_alloc_resource_anywhere_const(device_t dev, int type, int rid,
+    rman_res_t count, u_int flags)
+{
+	return (bus_alloc_resource(dev, type, &rid, 0, ~0, count, flags));
+}
+
+#define	bus_alloc_resource(dev, type, rid, start, end, count, flags)	\
+	_Generic((rid),							\
+	    int *: bus_alloc_resource,					\
+	    unsigned int *: bus_alloc_resource,				\
+	    default: bus_alloc_resource_const)				\
+	((dev), (type), (rid), (start), (end), (count), (flags))
+
+#define	bus_alloc_resource_any(dev, type, rid, flags)			\
+	_Generic((rid),							\
+	    int *: bus_alloc_resource_any,				\
+	    unsigned int *: bus_alloc_resource_any,			\
+	    default: bus_alloc_resource_any_const)			\
+	((dev), (type), (rid), (flags))
+
+#define	bus_alloc_resource_anywhere(dev, type, rid, count, flags)	\
+	_Generic((rid),							\
+	    int *: bus_alloc_resource_anywhere,				\
+	    unsigned int *: bus_alloc_resource_anywhere,		\
+	    default: bus_alloc_resource_anywhere_const)			\
+	((dev), (type), (rid), (count), (flags))
+
 /* Compat shims for simpler bus resource API. */
 int	bus_adjust_resource_new(device_t child, struct resource *r,
     rman_res_t start, rman_res_t end);
@@ -684,6 +726,7 @@ device_state_t	device_get_state(device_t dev);
 int	device_get_unit(device_t dev);
 struct sysctl_ctx_list *device_get_sysctl_ctx(device_t dev);
 struct sysctl_oid *device_get_sysctl_tree(device_t dev);
+bool	device_has_children(device_t dev);
 int	device_has_quiet_children(device_t dev);
 int	device_is_alive(device_t dev);	/* did probe succeed? */
 int	device_is_attached(device_t dev);	/* did attach succeed? */
@@ -717,7 +760,7 @@ void	device_unbusy(device_t dev);
 void	device_verbose(device_t dev);
 ssize_t	device_get_property(device_t dev, const char *prop, void *val,
     size_t sz, device_property_type_t type);
-bool device_has_property(device_t dev, const char *prop);
+bool	device_has_property(device_t dev, const char *prop);
 
 /*
  * Access functions for devclass.
@@ -832,10 +875,10 @@ void	bus_set_pass(int pass);
  * Routines to lock / unlock the newbus lock.
  * Must be taken out to interact with newbus.
  */
-void bus_topo_lock(void);
-void bus_topo_unlock(void);
+void	bus_topo_lock(void);
+void	bus_topo_unlock(void);
 struct mtx * bus_topo_mtx(void);
-void bus_topo_assert(void);
+void	bus_topo_assert(void);
 
 /**
  * Shorthands for constructing method tables.
@@ -903,7 +946,7 @@ DECLARE_MODULE(name##_##busname, name##_##busname##_mod,		\
 									\
 static __inline type varp ## _get_ ## var(device_t dev)			\
 {									\
-	uintptr_t v;							\
+	uintptr_t v = 0;						\
 	int e __diagused;						\
 	e = BUS_READ_IVAR(device_get_parent(dev), dev,			\
 	    ivarp ## _IVAR_ ## ivar, &v);				\
@@ -927,17 +970,17 @@ static __inline void varp ## _set_ ## var(device_t dev, type t)		\
 struct device_location_cache;
 typedef struct device_location_cache device_location_cache_t;
 device_location_cache_t *dev_wired_cache_init(void);
-void dev_wired_cache_fini(device_location_cache_t *dcp);
-bool dev_wired_cache_match(device_location_cache_t *dcp, device_t dev, const char *at);
+void	dev_wired_cache_fini(device_location_cache_t *dcp);
+bool	dev_wired_cache_match(device_location_cache_t *dcp, device_t dev, const char *at);
 
 #define	DEV_PROP_NAME_IOMMU	"iommu-unit"
 typedef void (*device_prop_dtr_t)(device_t dev, const char *name, void *val,
     void *dtr_ctx);
-int device_set_prop(device_t dev, const char *name, void *val,
+int	device_set_prop(device_t dev, const char *name, void *val,
     device_prop_dtr_t dtr, void *dtr_ctx);
-int device_get_prop(device_t dev, const char *name, void **valp);
-int device_clear_prop(device_t dev, const char *name);
-void device_clear_prop_alldev(const char *name);
+int	device_get_prop(device_t dev, const char *name, void **valp);
+int	device_clear_prop(device_t dev, const char *name);
+void	device_clear_prop_alldev(const char *name);
 
 /**
  * Shorthand macros, taking resource argument

@@ -287,7 +287,7 @@ sys_getgid(struct thread *td, struct getgid_args *uap)
 
 	td->td_retval[0] = td->td_ucred->cr_rgid;
 #if defined(COMPAT_43)
-	td->td_retval[1] = td->td_ucred->cr_groups[0];
+	td->td_retval[1] = td->td_ucred->cr_gid;
 #endif
 	return (0);
 }
@@ -307,7 +307,7 @@ int
 sys_getegid(struct thread *td, struct getegid_args *uap)
 {
 
-	td->td_retval[0] = td->td_ucred->cr_groups[0];
+	td->td_retval[0] = td->td_ucred->cr_gid;
 	return (0);
 }
 
@@ -395,7 +395,7 @@ again:
  *	pid must be in same session (EPERM)
  *	pid can't have done an exec (EACCES)
  * if pgid != pid
- * 	there must exist some pid in same session having pgid (EPERM)
+ *	there must exist some pid in same session having pgid (EPERM)
  * pid must not be session leader (EPERM)
  */
 #ifndef _SYS_SYSPROTO_H_
@@ -543,10 +543,8 @@ kern_setcred_copyin_supp_groups(struct setcred *const wcred,
 }
 
 int
-user_setcred(struct thread *td, const u_int flags,
-    const void *const uwcred, const size_t size, bool is_32bit)
+user_setcred(struct thread *td, const u_int flags, struct setcred *const wcred)
 {
-	struct setcred wcred;
 #ifdef MAC
 	struct mac mac;
 	/* Pointer to 'struct mac' or 'struct mac32'. */
@@ -566,65 +564,36 @@ user_setcred(struct thread *td, const u_int flags,
 	if ((flags & ~SETCREDF_MASK) != 0)
 		return (EINVAL);
 
-#ifdef COMPAT_FREEBSD32
-	if (is_32bit) {
-		struct setcred32 wcred32;
-
-		if (size != sizeof(wcred32))
-			return (EINVAL);
-		error = copyin(uwcred, &wcred32, sizeof(wcred32));
-		if (error != 0)
-			return (error);
-		/* These fields have exactly the same sizes and positions. */
-		memcpy(&wcred, &wcred32, &wcred32.setcred32_copy_end -
-		    &wcred32.setcred32_copy_start);
-		/* Remaining fields are pointers and need PTRIN*(). */
-		PTRIN_CP(wcred32, wcred, sc_supp_groups);
-		PTRIN_CP(wcred32, wcred, sc_label);
-	} else
-#endif /* COMPAT_FREEBSD32 */
-	{
-		if (size != sizeof(wcred))
-			return (EINVAL);
-		error = copyin(uwcred, &wcred, sizeof(wcred));
-		if (error != 0)
-			return (error);
-	}
 #ifdef MAC
-	umac = wcred.sc_label;
+	umac = wcred->sc_label;
 #endif
 	/* Also done on !MAC as a defensive measure. */
-	wcred.sc_label = NULL;
+	wcred->sc_label = NULL;
 
 	/*
 	 * Copy supplementary groups as needed.  There is no specific
 	 * alternative for 32-bit compatibility as 'gid_t' has the same size
 	 * everywhere.
 	 */
-	error = kern_setcred_copyin_supp_groups(&wcred, flags, smallgroups,
+	error = kern_setcred_copyin_supp_groups(wcred, flags, smallgroups,
 	    &groups);
 	if (error != 0)
 		goto free_groups;
 
 #ifdef MAC
 	if ((flags & SETCREDF_MAC_LABEL) != 0) {
-#ifdef COMPAT_FREEBSD32
-		if (is_32bit)
-			error = mac_label_copyin32(umac, &mac, NULL);
-		else
-#endif
-			error = mac_label_copyin(umac, &mac, NULL);
+		error = mac_label_copyin(umac, &mac, NULL);
 		if (error != 0)
 			goto free_groups;
-		wcred.sc_label = &mac;
+		wcred->sc_label = &mac;
 	}
 #endif
 
-	error = kern_setcred(td, flags, &wcred, groups);
+	error = kern_setcred(td, flags, wcred, groups);
 
 #ifdef MAC
-	if (wcred.sc_label != NULL)
-		free_copied_label(wcred.sc_label);
+	if (wcred->sc_label != NULL)
+		free_copied_label(wcred->sc_label);
 #endif
 
 free_groups:
@@ -645,7 +614,15 @@ struct setcred_args {
 int
 sys_setcred(struct thread *td, struct setcred_args *uap)
 {
-	return (user_setcred(td, uap->flags, uap->wcred, uap->size, false));
+	struct setcred wcred;
+	int error;
+
+	if (uap->size != sizeof(wcred))
+		return (EINVAL);
+	error = copyin(uap->wcred, &wcred, sizeof(wcred));
+	if (error != 0)
+		return (error);
+	return (user_setcred(td, uap->flags, &wcred));
 }
 
 /*
@@ -670,7 +647,7 @@ kern_setcred(struct thread *const td, const u_int flags,
 	gid_t *groups = NULL;
 	gid_t smallgroups[CRED_SMALLGROUPS_NB];
 	int error;
-	bool cred_set;
+	bool cred_set = false;
 
 	/* Bail out on unrecognized flags. */
 	if (flags & ~SETCREDF_MASK)
@@ -814,23 +791,49 @@ kern_setcred(struct thread *const td, const u_int flags,
 	if (error != 0)
 		goto unlock_finish;
 
+#ifdef RACCT
 	/*
-	 * Set the new credentials, noting that they have changed.
+	 * Hold a reference to 'new_cred', as we need to call some functions on
+	 * it after proc_set_cred_enforce_proc_lim().
 	 */
+	crhold(new_cred);
+#endif
+
+	/* Set the new credentials. */
 	cred_set = proc_set_cred_enforce_proc_lim(p, new_cred);
 	if (cred_set) {
 		setsugid(p);
+#ifdef RACCT
+		/* Adjust RACCT counters. */
+		racct_proc_ucred_changed(p, old_cred, new_cred);
+#endif
 		to_free_cred = old_cred;
 		MPASS(error == 0);
-	} else
+	} else {
+#ifdef RACCT
+		/* Matches the crhold() just before the containing 'if'. */
+		crfree(new_cred);
+#endif
 		error = EAGAIN;
+	}
 
 unlock_finish:
 	PROC_UNLOCK(p);
+
 	/*
 	 * Part 3: After releasing the process lock, we perform cleanups and
 	 * finishing operations.
 	 */
+
+#ifdef RACCT
+	if (cred_set) {
+#ifdef RCTL
+		rctl_proc_ucred_changed(p, new_cred);
+#endif
+		/* Paired with the crhold() above. */
+		crfree(new_cred);
+	}
+#endif
 
 #ifdef MAC
 	if (mac_set_proc_data != NULL)
@@ -958,14 +961,19 @@ sys_setuid(struct thread *td, struct setuid_args *uap)
 		change_euid(newcred, uip);
 		setsugid(p);
 	}
-	/*
-	 * This also transfers the proc count to the new user.
-	 */
-	proc_set_cred(p, newcred);
+
 #ifdef RACCT
 	racct_proc_ucred_changed(p, oldcred, newcred);
+#endif
+#ifdef RCTL
 	crhold(newcred);
 #endif
+	/*
+	 * Takes over 'newcred''s reference, so 'newcred' must not be used
+	 * besides this point except on RCTL where we took an additional
+	 * reference above.
+	 */
+	proc_set_cred(p, newcred);
 	PROC_UNLOCK(p);
 #ifdef RCTL
 	rctl_proc_ucred_changed(p, newcred);
@@ -1080,7 +1088,7 @@ sys_setgid(struct thread *td, struct setgid_args *uap)
 	    gid != oldcred->cr_svgid &&		/* allow setgid(saved gid) */
 #endif
 #ifdef POSIX_APPENDIX_B_4_2_2	/* Use BSD-compat clause from B.4.2.2 */
-	    gid != oldcred->cr_groups[0] && /* allow setgid(getegid()) */
+	    gid != oldcred->cr_gid && /* allow setgid(getegid()) */
 #endif
 	    (error = priv_check_cred(oldcred, PRIV_CRED_SETGID)) != 0)
 		goto fail;
@@ -1092,7 +1100,7 @@ sys_setgid(struct thread *td, struct setgid_args *uap)
 	 */
 	if (
 #ifdef POSIX_APPENDIX_B_4_2_2	/* use the clause from B.4.2.2 */
-	    gid == oldcred->cr_groups[0] ||
+	    gid == oldcred->cr_gid ||
 #endif
 	    /* We are using privs. */
 	    priv_check_cred(oldcred, PRIV_CRED_SETGID) == 0)
@@ -1121,7 +1129,7 @@ sys_setgid(struct thread *td, struct setgid_args *uap)
 	 * In all cases permitted cases, we are changing the egid.
 	 * Copy credentials so other references do not see our changes.
 	 */
-	if (oldcred->cr_groups[0] != gid) {
+	if (oldcred->cr_gid != gid) {
 		change_egid(newcred, gid);
 		setsugid(p);
 	}
@@ -1167,7 +1175,7 @@ sys_setegid(struct thread *td, struct setegid_args *uap)
 	    (error = priv_check_cred(oldcred, PRIV_CRED_SETEGID)) != 0)
 		goto fail;
 
-	if (oldcred->cr_groups[0] != egid) {
+	if (oldcred->cr_gid != egid) {
 		change_egid(newcred, egid);
 		setsugid(p);
 	}
@@ -1339,11 +1347,18 @@ sys_setreuid(struct thread *td, struct setreuid_args *uap)
 		change_svuid(newcred, newcred->cr_uid);
 		setsugid(p);
 	}
-	proc_set_cred(p, newcred);
 #ifdef RACCT
 	racct_proc_ucred_changed(p, oldcred, newcred);
+#endif
+#ifdef RCTL
 	crhold(newcred);
 #endif
+	/*
+	 * Takes over 'newcred''s reference, so 'newcred' must not be used
+	 * besides this point except on RCTL where we took an additional
+	 * reference above.
+	 */
+	proc_set_cred(p, newcred);
 	PROC_UNLOCK(p);
 #ifdef RCTL
 	rctl_proc_ucred_changed(p, newcred);
@@ -1393,12 +1408,12 @@ sys_setregid(struct thread *td, struct setregid_args *uap)
 
 	if (((rgid != (gid_t)-1 && rgid != oldcred->cr_rgid &&
 	    rgid != oldcred->cr_svgid) ||
-	     (egid != (gid_t)-1 && egid != oldcred->cr_groups[0] &&
+	     (egid != (gid_t)-1 && egid != oldcred->cr_gid &&
 	     egid != oldcred->cr_rgid && egid != oldcred->cr_svgid)) &&
 	    (error = priv_check_cred(oldcred, PRIV_CRED_SETREGID)) != 0)
 		goto fail;
 
-	if (egid != (gid_t)-1 && oldcred->cr_groups[0] != egid) {
+	if (egid != (gid_t)-1 && oldcred->cr_gid != egid) {
 		change_egid(newcred, egid);
 		setsugid(p);
 	}
@@ -1406,9 +1421,9 @@ sys_setregid(struct thread *td, struct setregid_args *uap)
 		change_rgid(newcred, rgid);
 		setsugid(p);
 	}
-	if ((rgid != (gid_t)-1 || newcred->cr_groups[0] != newcred->cr_rgid) &&
-	    newcred->cr_svgid != newcred->cr_groups[0]) {
-		change_svgid(newcred, newcred->cr_groups[0]);
+	if ((rgid != (gid_t)-1 || newcred->cr_gid != newcred->cr_rgid) &&
+	    newcred->cr_svgid != newcred->cr_gid) {
+		change_svgid(newcred, newcred->cr_gid);
 		setsugid(p);
 	}
 	proc_set_cred(p, newcred);
@@ -1485,11 +1500,18 @@ sys_setresuid(struct thread *td, struct setresuid_args *uap)
 		change_svuid(newcred, suid);
 		setsugid(p);
 	}
-	proc_set_cred(p, newcred);
 #ifdef RACCT
 	racct_proc_ucred_changed(p, oldcred, newcred);
+#endif
+#ifdef RCTL
 	crhold(newcred);
 #endif
+	/*
+	 * Takes over 'newcred''s reference, so 'newcred' must not be used
+	 * besides this point except on RCTL where we took an additional
+	 * reference above.
+	 */
+	proc_set_cred(p, newcred);
 	PROC_UNLOCK(p);
 #ifdef RCTL
 	rctl_proc_ucred_changed(p, newcred);
@@ -1547,17 +1569,17 @@ sys_setresgid(struct thread *td, struct setresgid_args *uap)
 
 	if (((rgid != (gid_t)-1 && rgid != oldcred->cr_rgid &&
 	      rgid != oldcred->cr_svgid &&
-	      rgid != oldcred->cr_groups[0]) ||
+	      rgid != oldcred->cr_gid) ||
 	     (egid != (gid_t)-1 && egid != oldcred->cr_rgid &&
 	      egid != oldcred->cr_svgid &&
-	      egid != oldcred->cr_groups[0]) ||
+	      egid != oldcred->cr_gid) ||
 	     (sgid != (gid_t)-1 && sgid != oldcred->cr_rgid &&
 	      sgid != oldcred->cr_svgid &&
-	      sgid != oldcred->cr_groups[0])) &&
+	      sgid != oldcred->cr_gid)) &&
 	    (error = priv_check_cred(oldcred, PRIV_CRED_SETRESGID)) != 0)
 		goto fail;
 
-	if (egid != (gid_t)-1 && oldcred->cr_groups[0] != egid) {
+	if (egid != (gid_t)-1 && oldcred->cr_gid != egid) {
 		change_egid(newcred, egid);
 		setsugid(p);
 	}
@@ -1626,8 +1648,8 @@ sys_getresgid(struct thread *td, struct getresgid_args *uap)
 		error1 = copyout(&cred->cr_rgid,
 		    uap->rgid, sizeof(cred->cr_rgid));
 	if (uap->egid)
-		error2 = copyout(&cred->cr_groups[0],
-		    uap->egid, sizeof(cred->cr_groups[0]));
+		error2 = copyout(&cred->cr_gid,
+		    uap->egid, sizeof(cred->cr_gid));
 	if (uap->sgid)
 		error3 = copyout(&cred->cr_svgid,
 		    uap->sgid, sizeof(cred->cr_svgid));
@@ -1737,7 +1759,7 @@ groupmember(gid_t gid, const struct ucred *cred)
 
 	groups_check_positive_len(cred->cr_ngroups);
 
-	if (gid == cred->cr_groups[0])
+	if (gid == cred->cr_gid)
 		return (true);
 
 	return (group_is_supplementary(gid, cred));
@@ -1894,6 +1916,38 @@ cr_canseejailproc(struct ucred *u1, struct ucred *u2)
 }
 
 /*
+ * Determine if u1 can tamper with the subject specified by u2, if they are in
+ * different jails and 'unprivileged_parent_tampering' jail policy allows it.
+ *
+ * May be called if u1 and u2 are in the same jail, but it is expected that the
+ * caller has already done a prison_check() prior to calling it.
+ *
+ * Returns: 0 for permitted, EPERM otherwise
+ */
+static int
+cr_can_tamper_with_subjail(struct ucred *u1, struct ucred *u2, int priv)
+{
+
+	MPASS(prison_check(u1, u2) == 0);
+	if (u1->cr_prison == u2->cr_prison)
+		return (0);
+
+	if (priv_check_cred(u1, priv) == 0)
+		return (0);
+
+	/*
+	 * Jails do not maintain a distinct UID space, so process visibility is
+	 * all that would control an unprivileged process' ability to tamper
+	 * with a process in a subjail by default if we did not have the
+	 * allow.unprivileged_parent_tampering knob to restrict it by default.
+	 */
+	if (prison_allow(u2, PR_ALLOW_UNPRIV_PARENT_TAMPER))
+		return (0);
+
+	return (EPERM);
+}
+
+/*
  * Helper for cr_cansee*() functions to abide by system-wide security.bsd.see_*
  * policies.  Determines if u1 "can see" u2 according to these policies.
  * Returns: 0 for permitted, ESRCH otherwise
@@ -2042,6 +2096,19 @@ cr_cansignal(struct ucred *cred, struct proc *proc, int signum)
 			return (error);
 	}
 
+	/*
+	 * At this point, the target may be in a different jail than the
+	 * subject -- the subject must be in a parent jail to the target,
+	 * whether it is prison0 or a subordinate of prison0 that has
+	 * children.  Additional privileges are required to allow this, as
+	 * whether the creds are truly equivalent or not must be determined on
+	 * a case-by-case basis.
+	 */
+	error = cr_can_tamper_with_subjail(cred, proc->p_ucred,
+	    PRIV_SIGNAL_DIFFJAIL);
+	if (error)
+		return (error);
+
 	return (0);
 }
 
@@ -2118,6 +2185,12 @@ p_cansched(struct thread *td, struct proc *p)
 		if (error)
 			return (error);
 	}
+
+	error = cr_can_tamper_with_subjail(td->td_ucred, p->p_ucred,
+	    PRIV_SCHED_DIFFJAIL);
+	if (error)
+		return (error);
+
 	return (0);
 }
 
@@ -2223,6 +2296,11 @@ p_candebug(struct thread *td, struct proc *p)
 		if (error)
 			return (error);
 	}
+
+	error = cr_can_tamper_with_subjail(td->td_ucred, p->p_ucred,
+	    PRIV_DEBUG_DIFFJAIL);
+	if (error)
+		return (error);
 
 	/* Can't trace init when securelevel > 0. */
 	if (p == initproc) {
@@ -2648,7 +2726,7 @@ cru2xt(struct thread *td, struct xucred *xcr)
  * 'enforce_proc_lim' being true and if no new process can be accounted to the
  * new real UID because of the current limit (see the inner comment for more
  * details) and the caller does not have privilege (PRIV_PROC_LIMIT) to override
- * that.
+ * that.  In this case, the reference to 'newcred' is not taken over.
  */
 static bool
 _proc_set_cred(struct proc *p, struct ucred *newcred, bool enforce_proc_lim)
@@ -2657,10 +2735,6 @@ _proc_set_cred(struct proc *p, struct ucred *newcred, bool enforce_proc_lim)
 
 	MPASS(oldcred != NULL);
 	PROC_LOCK_ASSERT(p, MA_OWNED);
-	KASSERT(newcred->cr_users == 0, ("%s: users %d not 0 on cred %p",
-	    __func__, newcred->cr_users, newcred));
-	KASSERT(newcred->cr_ref == 1, ("%s: ref %ld not 1 on cred %p",
-	    __func__, newcred->cr_ref, newcred));
 
 	if (newcred->cr_ruidinfo != oldcred->cr_ruidinfo) {
 		/*
@@ -2686,8 +2760,10 @@ _proc_set_cred(struct proc *p, struct ucred *newcred, bool enforce_proc_lim)
 	    __func__, oldcred->cr_users, oldcred));
 	oldcred->cr_users--;
 	mtx_unlock(&oldcred->cr_mtx);
+	mtx_lock(&newcred->cr_mtx);
+	newcred->cr_users++;
+	mtx_unlock(&newcred->cr_mtx);
 	p->p_ucred = newcred;
-	newcred->cr_users = 1;
 	PROC_UPDATE_COW(p);
 	if (newcred->cr_ruidinfo != oldcred->cr_ruidinfo)
 		(void)chgproccnt(oldcred->cr_ruidinfo, -1, 0);
@@ -3004,7 +3080,7 @@ void
 change_egid(struct ucred *newcred, gid_t egid)
 {
 
-	newcred->cr_groups[0] = egid;
+	newcred->cr_gid = egid;
 }
 
 /*-

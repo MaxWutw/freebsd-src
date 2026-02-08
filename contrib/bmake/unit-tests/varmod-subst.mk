@@ -1,4 +1,4 @@
-# $NetBSD: varmod-subst.mk,v 1.12 2023/06/16 07:20:45 rillig Exp $
+# $NetBSD: varmod-subst.mk,v 1.17 2025/03/29 19:08:53 rillig Exp $
 #
 # Tests for the :S,from,to, variable modifier.
 
@@ -9,7 +9,8 @@ all: mod-subst-dollar
 
 WORDS=		sequences of letters
 
-# The empty pattern never matches anything.
+# The empty pattern never matches anything, except if it is anchored at the
+# beginning or the end of the word.
 .if ${WORDS:S,,,} != ${WORDS}
 .  error
 .endif
@@ -141,6 +142,47 @@ WORDS=		sequences of letters
 .endif
 
 
+# In an empty expression, the ':S' modifier matches a single time, but only if
+# the search string is empty and anchored at either the beginning or the end
+# of the word.
+.if ${:U:S,,out-of-nothing,} != ""
+.  error
+.endif
+.if ${:U:S,^,out-of-nothing,} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,$,out-of-nothing,} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,^$,out-of-nothing,} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,,out-of-nothing,g} != ""
+.  error
+.endif
+.if ${:U:S,^,out-of-nothing,g} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,$,out-of-nothing,g} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,^$,out-of-nothing,g} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,,out-of-nothing,W} != ""
+.  error
+.endif
+.if ${:U:S,^,out-of-nothing,W} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,$,out-of-nothing,W} != "out-of-nothing"
+.  error
+.endif
+.if ${:U:S,^$,out-of-nothing,W} != "out-of-nothing"
+.  error
+.endif
+
+
 mod-subst:
 	@echo $@:
 	@echo :${:Ua b b c:S,a b,,:Q}:
@@ -210,6 +252,7 @@ mod-subst-chain:
 	# The error message is "make: Unknown modifier 'i'", which is
 	# kind of correct, although it is mixing the terms for variable
 	# modifiers with the matching modifiers.
+# expect: make: Unknown modifier ":i"
 	@echo ${:Uvalue:S,a,x,i}.
 
 # No matter how many dollar signs there are, they all get merged

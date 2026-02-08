@@ -322,6 +322,7 @@ is in use then the default speed is determined from the current
 serial port speed setting.
 .It Va console
 .Pq Dq vidconsole
+Comma- or space-separated list of consoles.
 .Dq comconsole
 selects serial console,
 .Dq vidconsole
@@ -336,6 +337,9 @@ selects the video console which prevents any input and hides all output
 replacing it with
 .Dq spinning
 character (useful for embedded products and such).
+This setting is for the
+.Xr loader 8
+only and does not set the kernel output.
 .It Va screen.font
 Set font size for framebuffer mode.
 The default font size is selected based on screen resolution.

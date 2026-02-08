@@ -64,6 +64,7 @@
 #include <netdb.h>
 #include <pwd.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -954,8 +955,9 @@ static int
 printaddr(struct sockaddr_storage *ss)
 {
 	struct sockaddr_un *sun;
-	char addrstr[NI_MAXHOST] = { '\0', '\0' };
+	char addrstr[NI_MAXHOST] = "";
 	int error, off, port = 0;
+	bool needs_ipv6_brackets = false;
 
 	switch (ss->ss_family) {
 	case AF_INET:
@@ -966,6 +968,8 @@ printaddr(struct sockaddr_storage *ss)
 	case AF_INET6:
 		if (IN6_IS_ADDR_UNSPECIFIED(&sstosin6(ss)->sin6_addr))
 			addrstr[0] = '*';
+		else
+			needs_ipv6_brackets = true;
 		port = ntohs(sstosin6(ss)->sin6_port);
 		break;
 	case AF_UNIX:
@@ -979,10 +983,15 @@ printaddr(struct sockaddr_storage *ss)
 		if (error)
 			errx(1, "cap_getnameinfo()");
 	}
+	if (needs_ipv6_brackets) {
+		if (port == 0)
+			return (xprintf("[%s]:*", addrstr));
+		return (xprintf("[%s]:%d", addrstr, port));
+	}
 	if (port == 0)
-		return xprintf("%s:*", addrstr);
+		return (xprintf("%s:*", addrstr));
 	else
-		return xprintf("%s:%d", addrstr, port);
+		return (xprintf("%s:%d", addrstr, port));
 }
 
 static const char *

@@ -70,6 +70,5 @@ fdclosedir(DIR *dirp)
 int
 closedir(DIR *dirp)
 {
-
 	return (_close(fdclosedir(dirp)));
 }

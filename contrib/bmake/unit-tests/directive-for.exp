@@ -1,30 +1,29 @@
-make: "directive-for.mk" line 117: outer
-make: "directive-for.mk" line 135: a:\ a:\file.txt
-make: "directive-for.mk" line 135: d:\\
-make: "directive-for.mk" line 135: d:\\file.txt
-make: "directive-for.mk" line 146: ( ( (
-make: "directive-for.mk" line 146: [ [ [
-make: "directive-for.mk" line 146: { { {
-make: "directive-for.mk" line 146: ) ) )
-make: "directive-for.mk" line 146: ] ] ]
-make: "directive-for.mk" line 146: } } }
-make: "directive-for.mk" line 146: (()) (()) (())
-make: "directive-for.mk" line 146: [[]] [[]] [[]]
-make: "directive-for.mk" line 146: {{}} {{}} {{}}
-make: "directive-for.mk" line 146: )( )( )(
-make: "directive-for.mk" line 146: ][ ][ ][
-make: "directive-for.mk" line 146: }{ }{ }{
-make: "directive-for.mk" line 166: invalid character ':' in .for loop variable name
-make: "directive-for.mk" line 173: invalid character '$' in .for loop variable name
-make: "directive-for.mk" line 185: invalid character '$' in .for loop variable name
-make: "directive-for.mk" line 196: Unknown modifier "Z"
-make: "directive-for.mk" line 197: XXX: Not reached word1
-make: "directive-for.mk" line 197: XXX: Not reached word3
-make: "directive-for.mk" line 204: no iteration variables in for
-make: "directive-for.mk" line 230: 1 open conditional
-make: "directive-for.mk" line 246: for-less endfor
-make: "directive-for.mk" line 247: if-less endif
-make: "directive-for.mk" line 255: if-less endif
+make: directive-for.mk:117: outer
+make: directive-for.mk:138: a:\ a:\file.txt
+make: directive-for.mk:138: d:\\
+make: directive-for.mk:138: d:\\file.txt
+make: directive-for.mk:158: ( ( (
+make: directive-for.mk:158: [ [ [
+make: directive-for.mk:158: { { {
+make: directive-for.mk:158: ) ) )
+make: directive-for.mk:158: ] ] ]
+make: directive-for.mk:158: } } }
+make: directive-for.mk:158: (()) (()) (())
+make: directive-for.mk:158: [[]] [[]] [[]]
+make: directive-for.mk:158: {{}} {{}} {{}}
+make: directive-for.mk:158: )( )( )(
+make: directive-for.mk:158: ][ ][ ][
+make: directive-for.mk:158: }{ }{ }{
+make: directive-for.mk:166: Invalid character ":" in .for loop variable name
+make: directive-for.mk:173: Invalid character "$" in .for loop variable name
+make: directive-for.mk:185: Invalid character "$" in .for loop variable name
+make: directive-for.mk:208: Missing iteration variables in .for loop
+make: directive-for.mk:234: 1 open conditional
+	in .for loop from directive-for.mk:232 with var = value
+make: directive-for.mk:252: for-less endfor
+make: directive-for.mk:254: if-less endif
+make: directive-for.mk:263: if-less endif
+	in .for loop from directive-for.mk:261 with var = value
 For: new loop 2
 For: end for 2
 For: end for 1
@@ -35,7 +34,7 @@ For: loop body with outer = o:
    endfor
 For: end for 1
 For: loop body with inner = i:
-make: "directive-for.mk" line 303: newline-item=(a)
+make: directive-for.mk:312: newline-item=(a)
 make: Fatal errors encountered -- cannot continue
 make: stopped in unit-tests
 exit status 1

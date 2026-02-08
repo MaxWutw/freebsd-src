@@ -168,6 +168,22 @@ if [ -f "$OBJTOP"/rescue/rescue/rescue.mk ] && \
 	run rm -f "$OBJTOP"/rescue/rescue/rescue.mk
 fi
 
+# 20241018  1363acbf25de    libc/csu: Support IFUNCs on riscv
+if [ ${MACHINE} = riscv ]; then
+	for f in "$OBJTOP"/lib/libc/.depend.libc_start1.*o; do
+		if [ ! -f "$f" ]; then
+			continue
+		fi
+		if ! grep -q 'lib/libc/csu/riscv/reloc\.c' "$f"; then
+			echo "Removing stale dependencies and objects for libc_start1.c"
+			run rm -f \
+			    "$OBJTOP"/lib/libc/.depend.libc_start1.* \
+			    "$OBJTOP"/lib/libc/libc_start1.*o
+			break
+		fi
+	done
+fi
+
 # 20241018  5deeebd8c6ca   Merge llvm-project release/19.x llvmorg-19.1.2-0-g7ba7d8e2f7b6
 p="$OBJTOP"/lib/clang/libclang/clang/Basic
 f="$p"/arm_mve_builtin_sema.inc
@@ -196,3 +212,12 @@ if [ -f "$OBJTOP"/lib/clang/liblldb/liblldb.a ]; then
 	echo "Removing old static liblldb library"
         run rm -f "$OBJTOP"/lib/clang/liblldb/liblldb.a
 fi
+
+# 20250402  839d0755fea8    ctld converted to C++
+clean_dep   usr.sbin/ctld   ctld c
+clean_dep   usr.sbin/ctld   conf c
+clean_dep   usr.sbin/ctld   discovery c
+clean_dep   usr.sbin/ctld   isns c
+clean_dep   usr.sbin/ctld   kernel c
+clean_dep   usr.sbin/ctld   login c
+clean_dep   usr.sbin/ctld   uclparse c

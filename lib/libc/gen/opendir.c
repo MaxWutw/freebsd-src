@@ -32,14 +32,7 @@
 #include <sys/cdefs.h>
 __SCCSID("@(#)opendir.c	8.8 (Berkeley) 5/1/95");
 #include "namespace.h"
-#include <sys/param.h>
-
 #include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include "un-namespace.h"
 
 #include "gen-private.h"
@@ -51,6 +44,5 @@ __SCCSID("@(#)opendir.c	8.8 (Berkeley) 5/1/95");
 DIR *
 opendir(const char *name)
 {
-
 	return (__opendir2(name, DTF_HIDEW | DTF_NODUP));
 }

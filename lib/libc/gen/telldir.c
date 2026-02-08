@@ -55,7 +55,7 @@ telldir(DIR *dirp)
 
 	if (__isthreaded)
 		_pthread_mutex_lock(&dirp->dd_lock);
-	/* 
+	/*
 	 * Outline:
 	 * 1) If the directory position fits in a packed structure, return that.
 	 * 2) Otherwise, see if it's already been recorded in the linked list
@@ -97,7 +97,7 @@ telldir(DIR *dirp)
 			LIST_INSERT_HEAD(&dirp->dd_td->td_locq, lp, loc_lqe);
 	}
 	ddloc.i.is_packed = 0;
-	/* 
+	/*
 	 * Technically this assignment could overflow on 32-bit architectures,
 	 * but we would get ENOMEM long before that happens.
 	 */
@@ -120,7 +120,7 @@ _seekdir(DIR *dirp, long loc)
 	struct dirent *dp;
 	union ddloc_packed ddloc;
 	off_t loc_seek;
-	long loc_loc;
+	size_t loc_loc;
 
 	ddloc.l = loc;
 
@@ -173,7 +173,7 @@ _seekdir(DIR *dirp, long loc)
  * fetching a new block to fix any such telldir locations.
  */
 void
-_fixtelldir(DIR *dirp, long oldseek, long oldloc)
+_fixtelldir(DIR *dirp, off_t oldseek, size_t oldloc)
 {
 	struct ddloc_mem *lp;
 

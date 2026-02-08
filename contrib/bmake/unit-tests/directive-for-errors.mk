@@ -1,4 +1,4 @@
-# $NetBSD: directive-for-errors.mk,v 1.6 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: directive-for-errors.mk,v 1.18 2025/06/28 22:39:28 rillig Exp $
 #
 # Tests for error handling in .for loops.
 
@@ -7,10 +7,10 @@
 # in a parse error.
 # expect+1: Unknown directive "fori"
 .fori in 1 2 3
+# expect+1: warning: <>
 .  warning <${i}>
+# expect+1: for-less endfor
 .endfor
-# expect-2: <>
-# expect-2: for-less endfor
 
 
 # A slash is not whitespace, therefore this is not parsed as a .for loop.
@@ -23,10 +23,10 @@
 # name is parsed a bit differently.
 # expect+1: Unknown directive "for"
 .for/i in 1 2 3
+# expect+1: warning: <>
 .  warning <${i}>
+# expect+1: for-less endfor
 .endfor
-# expect-2: warning: <>
-# expect-2: for-less endfor
 
 
 # Before for.c 1.173 from 2023-05-08, the variable name could be an arbitrary
@@ -35,20 +35,20 @@
 #
 # The '$$' was not replaced with the values '1' or '3' from the .for loop,
 # instead it was kept as-is, and when the .info directive expanded its
-# argument, each '$$' got replaced with a single '$'.  The "long variable
+# argument, each '$$' got replaced with a single '$'.  The "long
 # expression" ${$} got replaced though, even though this would be a parse
 # error everywhere outside a .for loop.
 ${:U\$}=	dollar		# see whether the "variable" '$' is local
 ${:U\\}=	backslash	# see whether the "variable" '\' is local
-# expect+1: invalid character '$' in .for loop variable name
-.for $ \ in 1 2 3 4
+# expect+1: Invalid character "$" in .for loop variable name
+.for a b $ \ in 1 2 3 4
 .  info Dollar $$ ${$} $($) and backslash $\ ${\} $(\).
 .endfor
 
 # If there are no variables, there is no point in expanding the .for loop
 # since this would end up in an endless loop, consuming 0 of the 3 values in
 # each iteration.
-# expect+1: no iteration variables in for
+# expect+1: Missing iteration variables in .for loop
 .for in 1 2 3
 # XXX: This should not be reached.  It should be skipped, as already done
 # when the number of values is not a multiple of the number of variables,
@@ -67,28 +67,21 @@ ${:U\\}=	backslash	# see whether the "variable" '\' is local
 
 
 # The list of values after the 'in' may be empty, no matter if this emptiness
-# comes from an empty expansion or even from a syntactically empty line.
+# comes from an expanded expression or from a syntactically empty line.
 .for i in
 .  info Would be reached if there were items to loop over.
 .endfor
 
 
-# A missing 'in' should parse the .for loop but skip the body.
-# expect+1: missing `in' in for
+# A missing 'in' parses the .for loop but skips the body.
+# expect+1: Missing "in" in .for loop
 .for i over k
-# XXX: As of 2020-12-31, this line is reached once.
-.  warning Should not be reached.
+.  error
 .endfor
 
 
-# A malformed modifier should be detected and skip the body of the loop.
-#
-# XXX: As of 2020-12-31, Var_Subst doesn't report any errors, therefore
-# the loop body is expanded as if no error had happened.
-# expect+1: Unknown modifier "Z"
+# An error in the items skips the body of the loop.
+# expect+1: Unknown modifier ":Z"
 .for i in 1 2 ${:U3:Z} 4
-.  warning Should not be reached.
+.  error
 .endfor
-# expect-2: Should not be reached.
-# expect-3: Should not be reached.
-# expect-4: Should not be reached.

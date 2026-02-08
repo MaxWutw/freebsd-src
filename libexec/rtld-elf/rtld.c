@@ -387,7 +387,7 @@ static struct ld_env_var_desc ld_env_vars[] = {
 	LD_ENV_DESC(TRACE_LOADED_OBJECTS_FMT1, false),
 	LD_ENV_DESC(TRACE_LOADED_OBJECTS_FMT2, false),
 	LD_ENV_DESC(TRACE_LOADED_OBJECTS_ALL, false),
-	LD_ENV_DESC(SHOW_AUXV, false),
+	LD_ENV_DESC(SHOW_AUXV, true),
 	LD_ENV_DESC(STATIC_TLS_EXTRA, false),
 	LD_ENV_DESC(NO_DL_ITERATE_PHDR_AFTER_FORK, false),
 };
@@ -498,7 +498,7 @@ rtld_trunc_page(uintptr_t x)
 func_ptr_type
 _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
 {
-    Elf_Auxinfo *aux, *auxp, *auxpf, *aux_info[AT_COUNT];
+    Elf_Auxinfo *aux, *auxp, *auxpf, *aux_info[AT_COUNT], auxtmp;
     Objlist_Entry *entry;
     Obj_Entry *last_interposer, *obj, *preload_tail;
     const Elf_Phdr *phdr;
@@ -663,7 +663,12 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
 		dbg("move aux from %p to %p", auxpf, aux);
 		/* XXXKIB insert place for AT_EXECPATH if not present */
 		for (;; auxp++, auxpf++) {
-		    *auxp = *auxpf;
+		    /*
+		     * NB: Use a temporary since *auxpf and
+		     * *auxp overlap if rtld_argc is 1
+		     */
+		    auxtmp = *auxpf;
+		    *auxp = auxtmp;
 		    if (auxp->a_type == AT_NULL)
 			    break;
 		}
@@ -760,7 +765,7 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
      */
     if (fd != -1) {	/* Load the main program. */
 	dbg("loading main program");
-	obj_main = map_object(fd, argv0, NULL);
+	obj_main = map_object(fd, argv0, NULL, true);
 	close(fd);
 	if (obj_main == NULL)
 	    rtld_die();
@@ -918,7 +923,7 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
        exit (0);
     }
 
-    ifunc_init(aux);
+    ifunc_init(aux_info);
 
     /*
      * Setup TLS for main thread.  This must be done after the
@@ -2892,7 +2897,7 @@ do_load_object(int fd, const char *name, char *path, struct stat *sbp,
     }
 
     dbg("loading \"%s\"", printable_path(path));
-    obj = map_object(fd, printable_path(path), sbp);
+    obj = map_object(fd, printable_path(path), sbp, false);
     if (obj == NULL)
         return (NULL);
 
@@ -4088,7 +4093,7 @@ do_dlsym(void *handle, const char *name, void *retaddr, const Ver_Entry *ve,
 	    sym = rtld_resolve_ifunc(defobj, def);
 	else if (ELF_ST_TYPE(def->st_info) == STT_TLS) {
 	    ti.ti_module = defobj->tlsindex;
-	    ti.ti_offset = def->st_value;
+	    ti.ti_offset = def->st_value - TLS_DTV_OFFSET;
 	    sym = __tls_get_addr(&ti);
 	} else
 	    sym = defobj->relocbase + def->st_value;
@@ -4269,7 +4274,7 @@ rtld_fill_dl_phdr_info(const Obj_Entry *obj, struct dl_phdr_info *phdr_info)
 	phdr_info->dlpi_tls_modid = obj->tlsindex;
 	dtvp = &_tcb_get()->tcb_dtv;
 	phdr_info->dlpi_tls_data = (char *)tls_get_addr_slow(dtvp,
-	    obj->tlsindex, 0, true) + TLS_DTV_OFFSET;
+	    obj->tlsindex, 0, true);
 	phdr_info->dlpi_adds = obj_loads;
 	phdr_info->dlpi_subs = obj_loads - obj_count;
 }
@@ -5373,6 +5378,9 @@ get_tls_block_ptr(void *tcb, size_t tcbsize)
  *     it is based on tls_last_offset, and TLS offsets here are really TCB
  *     offsets, whereas libc's tls_static_space is just the executable's static
  *     TLS segment.
+ *
+ * NB: This differs from NetBSD's ld.elf_so, where TLS offsets are relative to
+ *     the end of the TCB.
  */
 void *
 allocate_tls(Obj_Entry *objs, void *oldtcb, size_t tcbsize, size_t tcbalign)
@@ -5607,7 +5615,7 @@ allocate_module_tls(int index)
 
 	if (obj->tls_static) {
 #ifdef TLS_VARIANT_I
-		p = (char *)_tcb_get() + obj->tlsoffset + TLS_TCB_SIZE;
+		p = (char *)_tcb_get() + obj->tlsoffset;
 #else
 		p = (char *)_tcb_get() - obj->tlsoffset;
 #endif

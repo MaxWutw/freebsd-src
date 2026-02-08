@@ -1,7 +1,7 @@
-# $NetBSD: opt-debug-lint.mk,v 1.15 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: opt-debug-lint.mk,v 1.25 2025/06/28 22:39:29 rillig Exp $
 #
 # Tests for the -dL command line option, which runs additional checks
-# to catch common mistakes, such as unclosed variable expressions.
+# to catch common mistakes, such as unclosed expressions.
 
 .MAKEFLAGS: -dL
 
@@ -16,7 +16,6 @@
 #
 # See also:
 #	cond-undef-lint.mk
-# expect+2: Malformed conditional ($X)
 # expect+1: Variable "X" is undefined
 .if $X
 .  error
@@ -40,7 +39,6 @@
 # hoping for the caller to print an error message.  This resulted in the
 # well-known "Malformed conditional" error message, even though the
 # conditional was well-formed and the only error was an undefined variable.
-# expect+2: Malformed conditional (${UNDEF})
 # expect+1: Variable "UNDEF" is undefined
 .if ${UNDEF}
 .  error
@@ -62,8 +60,8 @@ ${UNDEF}: ${UNDEF}
 
 # Since 2020-10-03, in lint mode the variable modifier must be separated
 # by colons.  See varparse-mod.mk.
-# expect+2: Missing delimiter ':' after modifier "L"
-# expect+1: Missing delimiter ':' after modifier "P"
+# expect+2: Missing delimiter ":" after modifier "L"
+# expect+1: Missing delimiter ":" after modifier "P"
 .if ${value:LPL} != "value"
 .  error
 .endif
@@ -72,9 +70,11 @@ ${UNDEF}: ${UNDEF}
 # variable modifier had to be separated by colons.  This was wrong though
 # since make always fell back trying to parse the indirect modifier as a
 # SysV modifier.
-# expect+1: Unknown modifier "${"
-.if ${value:${:UL}PL} != "LPL}"		# FIXME: "LPL}" is unexpected here.
+# expect+1: Unknown modifier ":${"
+.if ${value:${:UL}PL} != ""
 .  error ${value:${:UL}PL}
+.else
+.  error
 .endif
 
 # Typically, an indirect modifier is followed by a colon or the closing
@@ -91,7 +91,7 @@ ${UNDEF}: ${UNDEF}
 #
 # Before var.c 1.856 from 2021-03-14, this regular expression was then
 # compiled even though that was not necessary for checking the syntax at the
-# level of variable expressions.  The unexpanded '$' then resulted in a wrong
+# level of expressions.  The unexpanded '$' then resulted in a wrong
 # error message.
 #
 # This only happened in lint mode since in default mode the early check for

@@ -45,7 +45,6 @@ __SCCSID("@(#)rewinddir.c	8.1 (Berkeley) 6/8/93");
 void
 rewinddir(DIR *dirp)
 {
-
 	if (__isthreaded)
 		_pthread_mutex_lock(&dirp->dd_lock);
 	dirp->dd_flags &= ~__DTF_SKIPREAD; /* current contents are invalid */

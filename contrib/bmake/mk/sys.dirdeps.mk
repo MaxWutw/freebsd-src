@@ -1,13 +1,8 @@
-# $Id: sys.dirdeps.mk,v 1.12 2023/05/14 16:16:03 sjg Exp $
+# $Id: sys.dirdeps.mk,v 1.16 2025/08/09 22:42:24 sjg Exp $
 #
 #	@(#) Copyright (c) 2012-2023, Simon J. Gerraty
 #
-#	This file is provided in the hope that it will
-#	be of use.  There is absolutely NO WARRANTY.
-#	Permission to copy, redistribute or otherwise
-#	use this file is hereby granted provided that
-#	the above copyright notice and this notice are
-#	left intact.
+#	SPDX-License-Identifier: BSD-2-Clause
 #
 #	Please send copies of changes and bug-fixes to:
 #	sjg@crufty.net
@@ -31,9 +26,10 @@ _PARSEDIR ?= ${.PARSEDIR:tA}
 
 .if ${.MAKE.LEVEL} == 0
 # make sure dirdeps target exists and do it first
+# init.mk will set .MAIN to 'dirdeps' if appropriate
+# as will dirdeps-targets.mk for top-level builds.
+# This allows a Makefile to have more control.
 dirdeps:
-# first .MAIN is what counts
-.MAIN: dirdeps
 .NOPATH: dirdeps
 all: dirdeps .WAIT
 .endif
@@ -193,11 +189,10 @@ RELSRCTOP?= ${RELTOP}
 # just in case
 .MAKE.DEPENDFILE ?= Makefile.depend
 
-.if ${.MAKE.LEVEL} > 0
-# Makefile.depend* also get read at level 1+
-# and often refer to DEP_MACHINE etc,
-# so ensure DEP_* (for TARGET_SPEC_VARS anyway) are set
-.for V in ${TARGET_SPEC_VARS}
-DEP_$V = ${$V}
+# Makefile.depend* often refer to DEP_MACHINE etc,
+# we need defaults for both first include in a leaf dir
+# and when level > 0
+# so ensure DEP_* for TARGET_SPEC_VARS and RELDIR are set
+.for V in ${TARGET_SPEC_VARS} RELDIR
+DEP_$V ?= ${$V}
 .endfor
-.endif

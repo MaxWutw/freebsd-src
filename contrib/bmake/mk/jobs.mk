@@ -1,13 +1,8 @@
-# $Id: jobs.mk,v 1.9 2023/04/27 18:10:27 sjg Exp $
+# $Id: jobs.mk,v 1.20 2025/08/09 22:42:24 sjg Exp $
 #
-#	@(#) Copyright (c) 2012-2023, Simon J. Gerraty
+#	@(#) Copyright (c) 2012-2025, Simon J. Gerraty
 #
-#	This file is provided in the hope that it will
-#	be of use.  There is absolutely NO WARRANTY.
-#	Permission to copy, redistribute or otherwise
-#	use this file is hereby granted provided that
-#	the above copyright notice and this notice are
-#	left intact.
+#	SPDX-License-Identifier: BSD-2-Clause
 #
 #	Please send copies of changes and bug-fixes to:
 #	sjg@crufty.net
@@ -29,11 +24,14 @@
 #
 #	${MAKE} -j${JOB_MAX} target > ${JOB_LOGDIR}/target.log 2>&1
 #
-# JOB_MAX defaults to 8 but should normally be derrived based on the
-# number of cpus available.  The wrapper script 'mk' makes that easy.
+# JOB_MAX should be something like 1.2 - 1.5 times the number of
+# available CPUs.
+# If bmake sets .MAKE.JOBS.C=yes we can use -jC and
+# JOB_MAX defaults to JOB_MAX_C (default 1.33C).
+# Otherwise we use 8.
 #
 
-now_utc ?= ${%s:L:gmtime}
+now_utc ?= ${%s:L:localtime}
 .if !defined(start_utc)
 start_utc := ${now_utc}
 .endif
@@ -63,21 +61,27 @@ NEWLOG_SH := ${(type newlog.sh) 2> /dev/null:L:sh:M/*}
 .endif
 .endif
 .if !empty(NEWLOG_SH) && exists(${NEWLOG_SH})
-NEWLOG := sh ${NEWLOG_SH}
+NEWLOG := ${.SHELL:Ush} ${NEWLOG_SH}
 JOB_NEWLOG_ARGS ?= -S -n ${JOB_LOG_GENS}
 .else
 NEWLOG = :
 .endif
 
 .if ${.MAKE.JOBS:U0} > 0
-JOB_MAX= ${.MAKE.JOBS}
+JOB_MAX = ${.MAKE.JOBS}
 .else
 # This should be derrived from number of cpu's
-JOB_MAX?= 8
-JOB_ARGS+= -j${JOB_MAX}
+.if ${.MAKE.JOBS.C:Uno} == "yes"
+# 1.2 - 1.5 times nCPU works well on most machines that support -jC
+# if the factor is floating point, the C suffix isn't needed
+JOB_MAX_C ?= 1.33
+JOB_MAX ?= ${JOB_MAX_C}
+.endif
+JOB_MAX ?= 8
+JOB_ARGS += -j${JOB_MAX}
 .endif
 
-# we need to reset .MAKE.LEVEL to 0 do that
+# we need to reset .MAKE.LEVEL to 0 so that
 # build orchestration works as expected (DIRDEPS_BUILD)
 ${.TARGETS:M*-jobs}:
 	@${NEWLOG} ${JOB_NEWLOG_ARGS} ${JOB_LOG}

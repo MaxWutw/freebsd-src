@@ -1,14 +1,8 @@
-# $Id: meta.sys.mk,v 1.51 2023/05/11 20:05:32 sjg Exp $
-
+# $Id: meta.sys.mk,v 1.57 2025/08/09 22:42:24 sjg Exp $
 #
 #	@(#) Copyright (c) 2010-2023, Simon J. Gerraty
 #
-#	This file is provided in the hope that it will
-#	be of use.  There is absolutely NO WARRANTY.
-#	Permission to copy, redistribute or otherwise
-#	use this file is hereby granted provided that
-#	the above copyright notice and this notice are
-#	left intact.
+#	SPDX-License-Identifier: BSD-2-Clause
 #
 #	Please send copies of changes and bug-fixes to:
 #	sjg@crufty.net
@@ -37,6 +31,11 @@ META_MODE += verbose
 META_MODE += nofilemon
 MKDEP_MK ?= auto.dep.mk
 .endif
+
+# META_MODE_XTRAS makes it easier to add things like 'env'
+# from the command line when debugging
+# :U avoids problems from := below
+META_MODE += ${META_MODE_XTRAS:U}
 
 .MAKE.MODE ?= ${META_MODE}
 
@@ -82,6 +81,7 @@ META2DEPS := ${META2DEPS}
 
 MAKE_PRINT_VAR_ON_ERROR += \
 	.ERROR_TARGET \
+	.ERROR_EXIT \
 	.ERROR_META_FILE \
 	.MAKE.LEVEL \
 	MAKEFILE \
@@ -98,10 +98,19 @@ SB = ${SRCTOP:H}
 ERROR_LOGDIR ?= ${SB}/error
 meta_error_log = ${ERROR_LOGDIR}/meta-${.MAKE.PID}.log
 
-# we are not interested in make telling us a failure happened elsewhere
+.if ${.MAKE.LEVEL} == 0 && !empty(NEWLOG_SH) && exists(${ERROR_LOGDIR})
+.BEGIN:	_rotateErrorLog
+_rotateErrorLog: .NOMETA .NOTMAIN
+	@${NEWLOG_SH} -d -S -n ${ERROR_LOG_GENS:U4} ${ERROR_LOGDIR}
+.endif
+
 .ERROR: _metaError
+# We are interested here in the target(s) that caused the build to fail.
+# We want to ignore targets that were "aborted" due to failure
+# elsewhere per the message below or a sub-make may just exit 6.
 _metaError: .NOMETA .NOTMAIN
-	-@[ "${.ERROR_META_FILE}" ] && { \
+	-@[ ${.ERROR_EXIT:U0} = 6 ] && exit 0; \
+	[ "${.ERROR_META_FILE}" ] && { \
 	grep -q 'failure has been detected in another branch' ${.ERROR_META_FILE} && exit 0; \
 	mkdir -p ${meta_error_log:H}; \
 	cp ${.ERROR_META_FILE} ${meta_error_log}; \

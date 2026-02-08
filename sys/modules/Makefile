@@ -566,6 +566,7 @@ _mlx5ib=	mlx5ib
     ${MACHINE_CPUARCH} == "i386"
 _ena=		ena
 _gve=		gve
+_igc=		igc
 _iwlwifi=	iwlwifi
 _rtw88=		rtw88
 .if ${MK_SOURCELESS_UCODE} != "no"
@@ -729,7 +730,6 @@ _et=		et
 _ftgpio=	ftgpio
 _ftwd=		ftwd
 _exca=		exca
-_igc=		igc
 _io=		io
 _itwd=		itwd
 _ix=		ix
@@ -917,7 +917,7 @@ SUBDIR:= ${SUBDIR:N${reject}}
 afterinstall: .PHONY
 	${KLDXREF_CMD} ${DESTDIR}${KMODDIR}
 .if defined(NO_ROOT) && defined(METALOG)
-	echo ".${DISTBASE}${KMODDIR}/linker.hints type=file mode=0644 uname=root gname=wheel" | \
+	echo ".${DISTBASE}${KMODDIR}/linker.hints type=file uname=root gname=wheel mode=0644" | \
 	    cat -l >> ${METALOG}
 .endif
 .endif

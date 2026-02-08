@@ -1,4 +1,4 @@
-# $NetBSD: cond-cmp-string.mk,v 1.17 2023/03/28 14:38:29 rillig Exp $
+# $NetBSD: cond-cmp-string.mk,v 1.21 2025/06/28 22:39:28 rillig Exp $
 #
 # Tests for string comparisons in .if conditions.
 
@@ -15,17 +15,17 @@
 
 # The left-hand side of the comparison must be enclosed in quotes.
 # This one is not enclosed in quotes and thus generates an error message.
-# expect+1: Malformed conditional (str != str)
+# expect+1: Malformed conditional "str != str"
 .if str != str
 .  error
 .endif
 
-# The left-hand side of the comparison requires that any variable expression
-# is defined.
+# An expression that occurs on the left-hand side of the comparison must be
+# defined.
 #
 # The variable named "" is never defined, nevertheless it can be used as a
-# starting point for variable expressions.  Applying the :U modifier to such
-# an undefined expression turns it into a defined expression.
+# starting point for an expression.  Applying the :U modifier to such an
+# undefined expression turns it into a defined expression.
 #
 # See ApplyModifier_Defined and DEF_DEFINED.
 .if ${:Ustr} != "str"
@@ -40,7 +40,7 @@
 
 # It is not possible to concatenate two string literals to form a single
 # string.  In C, Python and the shell this is possible, but not in make.
-# expect+1: Malformed conditional ("string" != "str""ing")
+# expect+1: Malformed conditional ""string" != "str""ing""
 .if "string" != "str""ing"
 .  error
 .else
@@ -48,7 +48,7 @@
 .endif
 
 # There is no = operator for strings.
-# expect+1: Malformed conditional (!("value" = "value"))
+# expect+1: Malformed conditional "!("value" = "value")"
 .if !("value" = "value")
 .  error
 .else
@@ -56,21 +56,22 @@
 .endif
 
 # There is no === operator for strings either.
-# expect+1: Malformed conditional (!("value" === "value"))
+# expect+1: Malformed conditional "!("value" === "value")"
 .if !("value" === "value")
 .  error
 .else
 .  error
 .endif
 
-# A variable expression can be enclosed in double quotes.
+# An expression can be enclosed in double quotes.
 .if ${:Uword} != "${:Uword}"
 .  error
 .endif
 
 # Between 2003-01-01 (maybe even earlier) and 2020-10-30, adding one of the
-# characters " \t!=><" directly after a variable expression resulted in a
-# "Malformed conditional", even though the string was well-formed.
+# characters " \t!=><" directly after an expression in a string literal
+# resulted in a "Malformed conditional", even though the string was
+# well-formed.
 .if ${:Uword } != "${:Uword} "
 .  error
 .endif
@@ -89,13 +90,12 @@
 .  error
 .endif
 
-# Adding another variable expression to the string literal works though.
+# Adding another expression to the string literal works though.
 .if ${:Uword} != "${:Uwo}${:Urd}"
 .  error
 .endif
 
-# Adding a space at the beginning of the quoted variable expression works
-# though.
+# Adding a space at the beginning of the quoted expression works though.
 .if ${:U word } != " ${:Uword} "
 .  error
 .endif
@@ -114,7 +114,7 @@
 .endif
 
 # Strings cannot be compared relationally, only for equality.
-# expect+1: Comparison with '<' requires both operands 'string' and 'string' to be numeric
+# expect+1: Comparison with "<" requires both operands "string" and "string" to be numeric
 .if "string" < "string"
 .  error
 .else
@@ -122,7 +122,7 @@
 .endif
 
 # Strings cannot be compared relationally, only for equality.
-# expect+1: Comparison with '<=' requires both operands 'string' and 'string' to be numeric
+# expect+1: Comparison with "<=" requires both operands "string" and "string" to be numeric
 .if "string" <= "string"
 .  error
 .else
@@ -130,7 +130,7 @@
 .endif
 
 # Strings cannot be compared relationally, only for equality.
-# expect+1: Comparison with '>' requires both operands 'string' and 'string' to be numeric
+# expect+1: Comparison with ">" requires both operands "string" and "string" to be numeric
 .if "string" > "string"
 .  error
 .else
@@ -138,14 +138,14 @@
 .endif
 
 # Strings cannot be compared relationally, only for equality.
-# expect+1: Comparison with '>=' requires both operands 'string' and 'string' to be numeric
+# expect+1: Comparison with ">=" requires both operands "string" and "string" to be numeric
 .if "string" >= "string"
 .  error
 .else
 .  error
 .endif
 
-# Two variables with different values compare unequal.
+# Two expressions with different values compare unequal.
 VAR1=	value1
 VAR2=	value2
 .if ${VAR1} != ${VAR2}

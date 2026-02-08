@@ -59,22 +59,17 @@
 #       Simon J. Gerraty <sjg@crufty.net>
 
 # RCSid:
-#	$Id: install-mk,v 1.239 2023/05/29 18:04:48 sjg Exp $
+#	$Id: install-mk,v 1.271 2025/11/11 18:08:02 sjg Exp $
 #
-#	@(#) Copyright (c) 1994-2023 Simon J. Gerraty
+#	@(#) Copyright (c) 1994-2025 Simon J. Gerraty
 #
-#	This file is provided in the hope that it will
-#	be of use.  There is absolutely NO WARRANTY.
-#	Permission to copy, redistribute or otherwise
-#	use this file is hereby granted provided that
-#	the above copyright notice and this notice are
-#	left intact.
+#	SPDX-License-Identifier: BSD-2-Clause
 #
 #	Please send copies of changes and bug-fixes to:
 #	sjg@crufty.net
 #
 
-MK_VERSION=20230601
+MK_VERSION=20251111
 OWNER=
 GROUP=
 MODE=444
@@ -174,7 +169,7 @@ if [ $mksrc = $dest ]; then
 else
 	# we do not install the examples
 	mk_files=`grep '^[a-z].*\.mk' FILES | $egrep -v '(examples/|^sys\.mk|sys/)'`
-	mk_scripts=`$egrep '^[a-z].*\.(sh|py)' FILES | $egrep -v '/'`
+	mk_scripts=`$egrep '^[a-z].*[.-](sh|py)' FILES | $egrep -v '/'`
 	sys_mk_files=`grep 'sys/.*\.mk' FILES`
 	SKIP_MKFILES=
 	[ -z "$SKIP_SYS_MK" ] && mk_files="sys.mk $mk_files"

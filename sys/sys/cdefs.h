@@ -214,6 +214,8 @@
 #define	__pure2		__attribute__((__const__))
 #define	__unused	__attribute__((__unused__))
 #define	__used		__attribute__((__used__))
+#define __deprecated	__attribute__((__deprecated__))
+#define __deprecated1(msg)	__attribute__((__deprecated__(msg)))
 #define	__packed	__attribute__((__packed__))
 #define	__aligned(x)	__attribute__((__aligned__(x)))
 #define	__section(x)	__attribute__((__section__(x)))
@@ -394,6 +396,17 @@
 #endif
 
 /*
+ * noexcept keyword added in C++11.
+ */
+#if defined(__cplusplus) && __cplusplus >= 201103L
+#define __noexcept noexcept
+#define __noexcept_if(__c) noexcept(__c)
+#else
+#define __noexcept
+#define __noexcept_if(__c)
+#endif
+
+/*
  * nodiscard attribute added in C++17 and C23, but supported by both LLVM and
  * GCC in earlier language versions, so we use __has_c{,pp}_attribute to test
  * for it.
@@ -556,6 +569,13 @@
 	    __attribute__((__format__ (__printf0__, fmtarg, firstvararg)))
 #else
 #define	__printf0like(fmtarg, firstvararg)
+#endif
+
+/* To silence warnings about null terminator not fitting into an array. */
+#if __has_attribute(__nonstring__)
+#define	__nonstring	__attribute__((__nonstring__))
+#else
+#define	__nonstring
 #endif
 
 #if defined(__GNUC__)
@@ -761,7 +781,7 @@
 #undef __ISO_C_VISIBLE
 #define __ISO_C_VISIBLE		2011
 #endif
-#else
+#else /* _POSIX_C_SOURCE */
 /*-
  * Deal with _ANSI_SOURCE:
  * If it is defined, and no other compilation environment is explicitly
@@ -799,7 +819,7 @@
 #define	__ISO_C_VISIBLE		2023
 #define	__EXT1_VISIBLE		1
 #endif
-#endif
+#endif /* _POSIX_C_SOURCE */
 
 /* User override __EXT1_VISIBLE */
 #if defined(__STDC_WANT_LIB_EXT1__)

@@ -77,6 +77,7 @@
 
 #include <machine/armreg.h>
 #include <machine/cpu.h>
+#include <machine/cpu_feat.h>
 #include <machine/debug_monitor.h>
 #include <machine/hypervisor.h>
 #include <machine/kdb.h>
@@ -984,11 +985,14 @@ initarm(struct arm64_bootparams *abp)
 
 	cninit();
 	set_ttbr0(abp->kern_ttbr0);
-	cpu_tlb_flushID();
+	pmap_s1_invalidate_all_kernel();
 
 	if (!valid)
 		panic("Invalid bus configuration: %s",
 		    kern_getenv("kern.cfg.order"));
+
+	/* Detect early CPU feature support */
+	enable_cpu_feat(CPU_FEAT_EARLY_BOOT);
 
 	/*
 	 * Check if pointer authentication is available on this system, and

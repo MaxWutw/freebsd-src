@@ -1,4 +1,4 @@
-# $NetBSD: cond-token-number.mk,v 1.9 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: cond-token-number.mk,v 1.12 2025/06/28 22:39:28 rillig Exp $
 #
 # Tests for number tokens in .if conditions.
 #
@@ -12,7 +12,7 @@
 # accepted by the condition parser.
 #
 # See the ch_isdigit call in CondParser_String.
-# expect+1: Malformed conditional (-0)
+# expect+1: Malformed conditional "-0"
 .if -0
 .  error
 .else
@@ -23,7 +23,7 @@
 # accepted by the condition parser.
 #
 # See the ch_isdigit call in CondParser_String.
-# expect+1: Malformed conditional (+0)
+# expect+1: Malformed conditional "+0"
 .if +0
 .  error
 .else
@@ -34,7 +34,7 @@
 # accepted by the condition parser.
 #
 # See the ch_isdigit call in CondParser_String.
-# expect+1: Malformed conditional (!-1)
+# expect+1: Malformed conditional "!-1"
 .if !-1
 .  error
 .else
@@ -45,20 +45,20 @@
 # accepted by the condition parser.
 #
 # See the ch_isdigit call in CondParser_String.
-# expect+1: Malformed conditional (!+1)
+# expect+1: Malformed conditional "!+1"
 .if !+1
 .  error
 .else
 .  error
 .endif
 
-# When the number comes from a variable expression though, it may be signed.
+# When the number comes from an expression though, it may be signed.
 # XXX: This is inconsistent.
 .if ${:U+0}
 .  error
 .endif
 
-# When the number comes from a variable expression though, it may be signed.
+# When the number comes from an expression though, it may be signed.
 # XXX: This is inconsistent.
 .if !${:U+1}
 .  error

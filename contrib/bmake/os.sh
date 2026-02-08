@@ -17,16 +17,11 @@
 #	Simon J. Gerraty <sjg@crufty.net>
 
 # RCSid:
-#	$Id: os.sh,v 1.63 2023/05/22 20:44:47 sjg Exp $
+#	$Id: os.sh,v 1.68 2025/08/07 21:59:54 sjg Exp $
 #
 #	@(#) Copyright (c) 1994 Simon J. Gerraty
 #
-#	This file is provided in the hope that it will
-#	be of use.  There is absolutely NO WARRANTY.
-#	Permission to copy, redistribute or otherwise
-#	use this file is hereby granted provided that 
-#	the above copyright notice and this notice are
-#	left intact. 
+#	SPDX-License-Identifier: BSD-2-Clause
 #      
 #	Please send copies of changes and bug-fixes to:
 #	sjg@crufty.net
@@ -38,8 +33,12 @@ _OS_SH=:
 OS=`uname`
 OSREL=`uname -r`
 OSMAJOR=`IFS=.; set $OSREL; echo $1`
-MACHINE=`uname -m`
-MACHINE_ARCH=`uname -p 2>/dev/null || echo $MACHINE`
+# we want to retain the raw output from uname -m and -p
+OS_MACHINE=`uname -m`
+OS_MACHINE_ARCH=`uname -p 2>/dev/null || echo $OS_MACHINE`
+
+MACHINE=$OS_MACHINE
+MACHINE_ARCH=$OS_MACHINE_ARCH
 
 # there is at least one case of `uname -p`
 # and even `uname -m` outputting usless info
@@ -91,6 +90,10 @@ AIX)	# everyone loves to be different...
 	PS_AXC=-e
 	SHARE_ARCH=$OS/$OSMAJOR.X
 	;;
+CYGWIN*) # uname -s not very useful
+        # uname -o produces just Cygwin which is better
+        OS=Cygwin
+        ;;
 Darwin) # this is more explicit (arm64 vs arm)
         HOST_ARCH=$MACHINE
         ;;
@@ -219,10 +222,11 @@ MACHINE_ARCH=${MACHINE_ARCH:-$MACHINE}
 HOST_ARCH=${HOST_ARCH:-$MACHINE_ARCH}
 case "$HOST_ARCH" in
 x86*64|amd64) MACHINE32_ARCH=i386;;
-*64) MACHINE32_ARCH=`echo $MACHINE_ARCH | sed 's,64,32,'`;;
+*64) MACHINE32_ARCH=${MACHINE32_ARCH:-`echo $MACHINE_ARCH | sed 's,64,32,'`};;
 *) MACHINE32_ARCH=$MACHINE_ARCH;;
 esac
 HOST_ARCH32=${HOST_ARCH32:-$MACHINE32_ARCH}
+export HOST_ARCH HOST_ARCH32
 # we mount server:/share/arch/$SHARE_ARCH as /usr/local
 SHARE_ARCH_DEFAULT=$OS/$OSMAJOR.X/$HOST_ARCH
 SHARE_ARCH=${SHARE_ARCH:-$SHARE_ARCH_DEFAULT}
@@ -234,10 +238,12 @@ HOST_TARGET=`echo ${OS}${OSMAJOR}-$HOST_ARCH | tr -d / | toLower`
 HOST_TARGET32=`echo ${OS}${OSMAJOR}-$HOST_ARCH32 | tr -d / | toLower`
 export HOST_TARGET HOST_TARGET32
 
+case `echo -e .` in -e*) echo_e=;; *) echo_e=-e;; esac
 case `echo -n .` in -n*) echo_n=; echo_c="\c";; *) echo_n=-n; echo_c=;; esac
 
 Echo() {
 	case "$1" in
+	-e) shift; echo $echo_e "$@";;
 	-n) shift; echo $echo_n "$@$echo_c";;
 	*)  echo "$@";;
 	esac
@@ -265,4 +271,3 @@ case /$0 in
 */host_target32) echo $HOST_TARGET32;;
 */host_target) echo $HOST_TARGET;;
 esac
-

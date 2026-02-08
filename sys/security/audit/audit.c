@@ -280,7 +280,7 @@ audit_record_ctor(void *mem, int size, void *arg, int flags)
 	cru2x(cred, &ar->k_ar.ar_subj_cred);
 	ar->k_ar.ar_subj_ruid = cred->cr_ruid;
 	ar->k_ar.ar_subj_rgid = cred->cr_rgid;
-	ar->k_ar.ar_subj_egid = cred->cr_groups[0];
+	ar->k_ar.ar_subj_egid = cred->cr_gid;
 	ar->k_ar.ar_subj_auid = cred->cr_audit.ai_auid;
 	ar->k_ar.ar_subj_asid = cred->cr_audit.ai_asid;
 	ar->k_ar.ar_subj_pid = td->td_proc->p_pid;
@@ -330,7 +330,7 @@ audit_record_dtor(void *mem, int size, void *arg)
  * call into the BSM assembly code to initialize it.
  */
 static void
-audit_init(void)
+audit_init(void *dummy __unused)
 {
 
 	audit_trail_enabled = 0;

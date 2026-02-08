@@ -1855,6 +1855,10 @@ device_get_children(device_t dev, device_t **devlistp, int *devcountp)
 	TAILQ_FOREACH(child, &dev->children, link) {
 		count++;
 	}
+	if (devlistp == NULL) {
+		*devcountp = count;
+		return (0);
+	}
 	if (count == 0) {
 		*devlistp = NULL;
 		*devcountp = 0;
@@ -1875,6 +1879,20 @@ device_get_children(device_t dev, device_t **devlistp, int *devcountp)
 	*devcountp = count;
 
 	return (0);
+}
+
+/**
+ * @brief Check if a device has children
+ *
+ * @param dev		the device to examine
+ *
+ * @rerval true		the device has at least one child
+ * @retval false	the device has no children
+ */
+bool
+device_has_children(device_t dev)
+{
+	return (!TAILQ_EMPTY(&dev->children));
 }
 
 /**
@@ -4658,7 +4676,7 @@ bus_release_resources(device_t dev, const struct resource_spec *rs,
  * parent of @p dev.
  */
 struct resource *
-bus_alloc_resource(device_t dev, int type, int *rid, rman_res_t start,
+(bus_alloc_resource)(device_t dev, int type, int *rid, rman_res_t start,
     rman_res_t end, rman_res_t count, u_int flags)
 {
 	struct resource *res;
@@ -5746,7 +5764,7 @@ device_get_path(device_t dev, const char *locator, struct sbuf *sb)
 	KASSERT(sb != NULL, ("sb is NULL"));
 	parent = device_get_parent(dev);
 	if (parent == NULL) {
-		error = sbuf_printf(sb, "/");
+		error = sbuf_putc(sb, '/');
 	} else {
 		error = BUS_GET_DEVICE_PATH(parent, dev, locator, sb);
 		if (error == 0) {

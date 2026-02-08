@@ -383,7 +383,7 @@ afterinstall: _kldxref
 _kldxref: .PHONY
 	${KLDXREF_CMD} ${DESTDIR}${KMODDIR}
 .if defined(NO_ROOT) && defined(METALOG)
-	echo ".${DISTBASE}${KMODDIR}/linker.hints type=file mode=0644 uname=root gname=wheel" | \
+	echo ".${DISTBASE}${KMODDIR}/linker.hints type=file uname=root gname=wheel mode=0644" | \
 	    cat -l >> ${METALOG}
 .endif
 .endif
@@ -470,7 +470,7 @@ CLEANFILES+=	${_i}
 .m.h:	${SYSDIR}/tools/makeobjops.awk
 	${AWK} -f ${SYSDIR}/tools/makeobjops.awk ${.IMPSRC} -h
 
-.for _i in mii pccard
+.for _i in mii
 .if !empty(SRCS:M${_i}devs.h)
 CLEANFILES+=	${_i}devs.h
 ${_i}devs.h: ${SYSDIR}/tools/${_i}devs2h.awk ${SYSDIR}/dev/${_i}/${_i}devs

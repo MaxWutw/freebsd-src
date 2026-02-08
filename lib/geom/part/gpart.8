@@ -22,7 +22,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd October 24, 2025
+.Dd December 4, 2025
 .Dt GPART 8
 .Os
 .Sh NAME
@@ -112,6 +112,7 @@
 .Ar geom
 .\" ==== SHOW ====
 .Nm
+.Op Fl -libxo
 .Cm show
 .Op Fl l | r
 .Op Fl p
@@ -537,6 +538,13 @@ See
 .It Cm unload
 See
 .Xr geom 8 .
+.It Fl -libxo
+Generate output via
+.Xr libxo 3
+in a selection of different human and machine readable formats.
+See
+.Xr xo_options 7
+for details on command line arguments.
 .El
 .Sh PARTITIONING SCHEMES
 Several partitioning schemes are supported by the
@@ -1007,6 +1015,11 @@ for GPT.
 A illumos/Solaris partition dedicated to reserved space.
 The scheme-specific type is
 .Qq Li "!6a945a3b-1dd2-11b2-99a6-080020736631"
+for GPT.
+.It Cm u-boot-env
+A raw partition dedicated to U-Boot for storing its environment.
+The scheme-specific type is
+.Qq Li "!3de21764-95bd-54bd-a5c3-4abe786f38a8"
 for GPT.
 .It Cm vmware-vmfs
 A partition that contains a VMware File System (VMFS).
@@ -1523,6 +1536,7 @@ for details
 .El
 .Sh SEE ALSO
 .Xr geom 4 ,
+.Xr xo_options 7 ,
 .Xr boot0cfg 8 ,
 .Xr geom 8 ,
 .Xr glabel 8 ,
