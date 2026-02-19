@@ -253,6 +253,29 @@ struct vm_readwrite_kernemu_device {
 };
 _Static_assert(sizeof(struct vm_readwrite_kernemu_device) == 24, "ABI");
 
+struct vm_sev_launch_start {
+	uint32_t handle;
+	uint32_t policy;
+	uint64_t dh_cert_paddr;
+	uint32_t dh_cert_len;
+	uint32_t reserved;
+	uint64_t session_paddr;
+	uint32_t session_len;
+};
+
+struct vm_sev_platform_status {
+	uint8_t 	api_major;
+	uint8_t 	api_minor;
+	uint8_t 	state;	
+	uint8_t 	owner;
+	uint32_t 	cfges_build;
+	uint32_t 	guest_count;
+};
+
+struct vm_sev_launch_finish {
+	uint32_t handle;
+};
+
 enum {
 	/* general routines */
 	IOCNUM_ABIVERS = 0,
@@ -341,7 +364,13 @@ enum {
 	/* checkpoint */
 	IOCNUM_SNAPSHOT_REQ = 113,
 
-	IOCNUM_RESTORE_TIME = 115
+	IOCNUM_RESTORE_TIME = 115,
+
+	/* AMD SEV */
+	IOCNUM_SEV_INIT = 116,
+	IOCNUM_SEV_LAUNCH_START = 117,
+	IOCNUM_SEV_PLATFORM_STATUS = 118,
+	IOCNUM_SEV_LAUNCH_FINISH = 119
 };
 
 #define	VM_RUN		\
@@ -468,4 +497,12 @@ enum {
 	_IOWR('v', IOCNUM_SNAPSHOT_REQ, struct vm_snapshot_meta)
 #define VM_RESTORE_TIME \
 	_IOWR('v', IOCNUM_RESTORE_TIME, int)
+#define VM_SEV_INIT \
+	_IO('v', IOCNUM_SEV_INIT)
+#define VM_SEV_PLATFORM_STATUS \
+	_IOR('v', IOCNUM_SEV_PLATFORM_STATUS, struct vm_sev_platform_status)
+#define VM_SEV_LAUNCH_START \
+	_IOW('v', IOCNUM_SEV_LAUNCH_START, struct vm_sev_launch_start)
+#define VM_SEV_LAUNCH_FINISH \
+	_IOW('v', IOCNUM_SEV_LAUNCH_FINISH, struct vm_sev_launch_finish)
 #endif
