@@ -63,6 +63,7 @@
 #include <x86/psl.h>
 #include <x86/apicreg.h>
 #include <x86/ifunc.h>
+#include <x86/sev.h>
 
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
@@ -2103,3 +2104,4 @@ vm_restore_time(struct vm *vm)
 	return (0);
 }
 #endif
+MODULE_DEPEND(vmm, asp, 1, 1, 1);

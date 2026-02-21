@@ -9,6 +9,8 @@ SRCS+=	bus_if.h
 SRCS+=	device_if.h
 SRCS+=	pci_if.h
 
+EXPORT_SYMS= YES
+
 CFLAGS+=	-fms-extensions
 CFLAGS.clang+=	-Wno-microsoft-anon-tag
 
