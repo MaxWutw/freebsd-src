@@ -54,6 +54,8 @@
 #include <machine/vmm_instruction_emul.h>
 #include <machine/vmm_snapshot.h>
 
+#include <x86/sev.h>
+
 #include "vmm_lapic.h"
 #include "vmm_stat.h"
 #include "vmm_ktr.h"
@@ -603,6 +605,14 @@ svm_init(struct vm *vm, pmap_t pmap)
 
 	/* Intercept access to all I/O ports. */
 	memset(svm_sc->iopm_bitmap, 0xFF, SVM_IO_BITMAP_SIZE);
+
+	/* Get AMD SEV Platform status */
+	struct sev_platform_status pstatus;
+	if (sevops_platform_status(&pstatus) == 0) {
+		printf("SVM: SEV API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
+		printf("SVM: State: %d\n", pstatus.state);
+		printf("SVM: Guests: %d\n", pstatus.guest_count);
+	}
 
 	return (svm_sc);
 }

@@ -450,6 +450,222 @@ asp_hw_platform_status(struct asp_softc *sc, struct sev_platform_status *pstatus
 }
 
 static int
+asp_hw_guest_launch_start(struct asp_softc *sc, struct sev_launch_start *glaunch_start)
+{
+	struct sev_launch_start *launch_start;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	launch_start = (struct sev_launch_start*)sc->cmd_kva;
+	bzero(launch_start, sizeof(struct sev_launch_start));
+
+	launch_start->handle = glaunch_start->handle;
+	launch_start->policy = glaunch_start->policy;
+
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_START, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	if (error)
+		return (error);
+
+	/* If the HANDLE field is zero, a new VEK is generated for this guest. */
+	if (glaunch_start->handle == 0)
+		glaunch_start->handle = launch_start->handle;
+
+	return (0);
+}
+
+static int
+asp_hw_guest_status(struct asp_softc *sc, struct sev_guest_status *gstatus)
+{
+	struct sev_guest_status *status;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	status = (struct sev_guest_status*)sc->cmd_kva;
+	bzero(status, sizeof(struct sev_guest_status));
+
+	error = asp_send_cmd(sc, SEV_CMD_GUEST_STATUS, sc->cmd_paddr);
+	
+	mtx_unlock(&sc->mtx_lock);
+
+	if (error)
+		return (error);
+
+	bcopy(status, gstatus, sizeof(struct sev_guest_status));
+
+	return (0);
+}
+
+static int
+asp_hw_guest_launch_update_data(struct asp_softc *sc, struct sev_launch_update_data *gludata)
+{
+	struct sev_launch_update_data *ludata;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	ludata = (struct sev_launch_update_data*)sc->cmd_kva;
+	bzero(ludata, sizeof(struct sev_launch_update_data));
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_UPDATE_DATA, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_launch_update_vmsa(struct asp_softc *sc, struct sev_launch_update_vmsa *gluvmsa)
+{
+	struct sev_launch_update_vmsa *luvmsa;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	luvmsa = (struct sev_launch_update_vmsa*)sc->cmd_kva;
+	bzero(luvmsa, sizeof(struct sev_launch_update_vmsa));
+
+	luvmsa->handle = gluvmsa->handle;
+	luvmsa->paddr = gluvmsa->paddr;
+	luvmsa->length = gluvmsa->length;
+
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_UPDATE_VMSA, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_launch_finish(struct asp_softc *sc, struct sev_launch_finish *gfinish)
+{
+	struct sev_launch_finish *finish;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	finish = (struct sev_launch_finish*)sc->cmd_kva;
+	bzero(finish, sizeof(struct sev_launch_finish));
+	
+	finish->handle = gfinish->handle;
+	
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_FINISH, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_activate(struct asp_softc *sc, struct sev_activate *gactivate)
+{
+	struct sev_activate *activate;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	activate = (struct sev_activate*)sc->cmd_kva;
+	bzero(activate, sizeof(struct sev_activate));
+	
+	activate->handle = gactivate->handle;
+	activate->asid = gactivate->asid;
+	
+	error = asp_send_cmd(sc, SEV_CMD_ACTIVATE, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_df_flush(struct asp_softc *sc)
+{
+	int error;
+
+	/* 
+	 * The x86 system software must execute WBINVD 
+	 * before invoking the DF_FLUSH command.	
+	 */
+
+	mtx_lock(&sc->mtx_lock);
+
+	error = asp_send_cmd(sc, SEV_CMD_DF_FLUSH, 0x0);
+	
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_deactivate(struct asp_softc *sc, struct sev_deactivate *gdeactivate)
+{
+	struct sev_deactivate *deactivate;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	deactivate = (struct sev_deactivate*)sc->cmd_kva;
+	bzero(deactivate, sizeof(struct sev_deactivate));
+	
+	deactivate->handle = gdeactivate->handle;
+	
+	error = asp_send_cmd(sc, SEV_CMD_DEACTIVATE, sc->cmd_paddr);
+	mtx_unlock(&sc->mtx_lock);
+
+
+	return (error);
+}
+
+static int
+asp_hw_guest_decommission(struct asp_softc *sc, struct sev_decommission *arg)
+{
+	struct sev_decommission *decom;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	decom = (struct sev_decommission*)sc->cmd_kva;
+	bzero(decom, sizeof(struct sev_decommission));
+
+	decom->handle = arg->handle;
+
+	error = asp_send_cmd(sc, SEV_CMD_DECOMMISSION, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_guest_shutdown(struct asp_softc *sc, struct sev_guest_shutdown_args *args)
+{
+	struct sev_deactivate deactivate;
+	struct sev_decommission decom;
+	int error;
+	
+	bzero(&deactivate, sizeof(struct sev_deactivate));
+	deactivate.handle = args->handle;
+	error = asp_hw_guest_deactivate(sc, &deactivate);
+	if (error)
+		return  (error);
+
+	error = asp_hw_guest_df_flush(sc);
+	if (error)
+		return  (error);
+
+	bzero(&decom, sizeof(struct sev_decommission));
+	decom.handle = args->handle;
+	error = asp_hw_guest_decommission(sc, &decom);
+	if (error)
+		return  (error);
+
+	return (0);
+}
+
+static int
 sev_platform_init(void)
 {
 	if (g_asp_softc == NULL)
@@ -463,7 +679,6 @@ sev_platform_shutdown(void)
 {
 	if (g_asp_softc == NULL)
 		return (ENXIO);
-
 	return asp_hw_platform_shutdown(g_asp_softc);
 }
 
@@ -472,53 +687,64 @@ sev_platform_status(struct sev_platform_status *pstatus)
 {
 	if (g_asp_softc == NULL)
 		return (ENXIO);
-	
 	return asp_hw_platform_status(g_asp_softc, pstatus);
 }
 
-/*
 static int
-sev_guest_launch_start()
+sev_guest_launch_start(struct sev_launch_start *glaunch_start)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_start(g_asp_softc, glaunch_start);
 }
 
 static int
-sev_guest_status()
+sev_guest_activate(struct sev_activate *gactivate)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_activate(g_asp_softc, gactivate);
 }
 
 static int
-sev_guest_launch_update_data()
+sev_guest_status(struct sev_guest_status *gstatus)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_status(g_asp_softc, gstatus);
 }
 
 static int
-sev_guest_launch_update_vmsa()
+sev_guest_launch_update_data(struct sev_launch_update_data *glaunch_update_data)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_update_data(g_asp_softc, glaunch_update_data);
 }
 
 static int
-sev_guest_launch_finish()
+sev_guest_launch_update_vmsa(struct sev_launch_update_vmsa *glaunch_update_vmsa)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_update_vmsa(g_asp_softc, glaunch_update_vmsa);
 }
 
 static int
-sev_guest_launch_finish()
+sev_guest_launch_finish(struct sev_launch_finish *glaunch_finish)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_finish(g_asp_softc, glaunch_finish);
 }
 
 static int
-sev_guest_shutdown()
+sev_guest_shutdown(struct sev_guest_shutdown_args *args)
 {
-
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_shutdown(g_asp_softc, args);
 }
-*/
 
 static device_method_t asp_methods[] = {
 	DEVMETHOD(device_probe, asp_probe),
@@ -538,15 +764,13 @@ static struct sev_ops asp_sev_ops_impl = {
 	.platform_init = sev_platform_init,
 	.platform_shutdown = sev_platform_shutdown,
 	.platform_status = sev_platform_status,
-	/*
-	.guest_launch_start = ,
-	.guest_status = ,
-	.guest_launch_update_data = ,
-	.guest_launch_update_vmsa = ,
-	.guest_launch_finish = ,
-	.guest_activate = ,
-	.guest_shutdown = 
-	*/
+	.guest_launch_start = sev_guest_launch_start,
+	.guest_activate = sev_guest_activate,
+	.guest_status = sev_guest_status,
+	.guest_launch_update_data = sev_guest_launch_update_data,
+	.guest_launch_update_vmsa = sev_guest_launch_update_vmsa,
+	.guest_launch_finish = sev_guest_launch_finish,
+	.guest_shutdown = sev_guest_shutdown
 };
 
 DRIVER_MODULE(asp, pci, asp_driver, NULL, NULL);
