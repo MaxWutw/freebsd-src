@@ -291,6 +291,9 @@ void	vm_setup_freebsd_gdt(uint64_t *gdtr);
 int	vm_snapshot_req(struct vmctx *ctx, struct vm_snapshot_meta *meta);
 int	vm_restore_time(struct vmctx *ctx);
 
+/* AMD SEV */
+int vm_sev_command(struct vmctx *ctx, uint32_t cmd, void *data, size_t len);
+
 /*
  * Deprecated interfaces, do not use them in new code.
  */

@@ -32,6 +32,7 @@
 struct pcpu;
 struct svm_softc;
 struct svm_vcpu;
+struct sev_launch_update_data;
 
 /*
  * Guest register state that is saved outside the VMCB.
@@ -69,5 +70,19 @@ void svm_launch(uint64_t pa, struct svm_regctx *gctx, struct pcpu *pcpu);
 #ifdef BHYVE_SNAPSHOT
 void svm_set_tsc_offset(struct svm_vcpu *vcpu, uint64_t offset);
 #endif
+
+/* 
+ * AMD SEV functions 
+ */
+struct svm_softc;
+struct vm_sev_cmd;
+
+int svm_sev_hardware_init(void);
+void svm_sev_hardware_free(void);
+
+int svm_sev_launch_start(struct svm_softc *sc);
+int svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data *udata);
+int svm_sev_launch_finish(struct svm_softc *sc);
+int svm_sev_shutdown(struct svm_softc *sc);
 
 #endif /* _SVM_H_ */

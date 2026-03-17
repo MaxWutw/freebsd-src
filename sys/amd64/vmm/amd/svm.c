@@ -25,7 +25,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include <sys/cdefs.h>
 #include "opt_bhyve_snapshot.h"
 
@@ -39,6 +38,7 @@
 #include <sys/reg.h>
 #include <sys/smr.h>
 #include <sys/sysctl.h>
+#include <sys/bitstring.h>
 
 #include <vm/vm.h>
 #include <vm/vm_extern.h>
@@ -640,6 +640,7 @@ svm_init(struct vm *vm, pmap_t pmap)
 	/* Intercept access to all I/O ports. */
 	memset(svm_sc->iopm_bitmap, 0xFF, SVM_IO_BITMAP_SIZE);
 
+	svm_sev_hardware_init();
 	/* Get AMD SEV Platform status */
 	struct sev_platform_status pstatus;
 	if (sevops_platform_status(&pstatus) == 0) {
@@ -1956,12 +1957,39 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 	long eptgen;
 	int cpu;
 	bool alloc_asid;
+	struct svm_softc *sc;
 
 	cpu = curcpu;
+	sc = vcpu->sc;
 	CPU_SET_ATOMIC(cpu, &pmap->pm_active);
 	smr_enter(pmap->pm_eptsmr);
 
 	ctrl = svm_get_vmcb_ctrl(vcpu);
+
+	/*
+	 * When AMD SEV is enabled, we will maintain a static SEV ASID 
+	 * for every virtaul machine. And set the tlb_ctrl to
+	 * VMCB_TLB_FLUSH_GUEST, without allocate a new ASID to VM.
+	 */
+	if (sc->sev_enable) {
+		ctrl->asid = sc->sev_asid;
+		
+		eptgen = atomic_load_long(&pmap->pm_eptgen);
+		ctrl->tlb_ctrl = VMCB_TLB_FLUSH_NOTHING;
+
+		if (vcpu->eptgen != eptgen) {
+			/* 
+			 * Currently we assume all the AMD SEV 
+			 * supported machine are supports FlushByAsid.
+			 */
+			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
+			vcpu->eptgen = eptgen;
+		}
+
+		svm_set_dirty(vcpu, VMCB_CACHE_ASID);
+
+		return;
+	}
 
 	/*
 	 * The TLB entries associated with the vcpu's ASID are not valid
@@ -2296,6 +2324,7 @@ svm_cleanup(void *vmi)
 	free(sc->iopm_bitmap, M_SVM);
 	free(sc->msr_bitmap, M_SVM);
 	free(sc, M_SVM);
+	svm_sev_hardware_free();
 }
 
 static register_t *
@@ -2836,6 +2865,48 @@ svm_restore_tsc(void *vcpui, uint64_t offset)
 }
 #endif
 
+static int
+svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
+{
+	struct svm_softc *sc = vmi;
+	int error = 0;
+	struct sev_launch_update_data udata;
+
+	switch(sevcmd->cmd) {
+	case VM_SEV_CMD_INIT:
+		error = svm_sev_hardware_init();
+		break;
+
+	case VM_SEV_CMD_LAUNCH_START:
+		error = svm_sev_launch_start(sc);
+		break;
+
+	case VM_SEV_CMD_LAUNCH_UPDATE_DATA:
+		error = copyin(sevcmd->data, &udata, sizeof(udata));
+		if (error)
+			break;
+
+		error = svm_sev_launch_update_data(sc, &udata);
+		break;
+
+	case VM_SEV_CMD_LAUNCH_MEASURE:
+		break;
+
+	case VM_SEV_CMD_LAUNCH_FINISH:
+		error = svm_sev_launch_finish(sc);
+		break;
+
+	case VM_SEV_CMD_SHUTDOWN:
+		error = svm_sev_shutdown(sc);
+		break;
+
+	default:
+		error = EINVAL;
+	}
+
+	return (error);
+}
+
 const struct vmm_ops vmm_ops_amd = {
 	.modinit	= svm_modinit,
 	.modcleanup	= svm_modcleanup,
@@ -2860,4 +2931,5 @@ const struct vmm_ops vmm_ops_amd = {
 	.vcpu_snapshot	= svm_vcpu_snapshot,
 	.restore_tsc	= svm_restore_tsc,
 #endif
+	.enc_mem	= svm_sev_enc_mem,
 };

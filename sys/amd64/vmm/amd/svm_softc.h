@@ -72,6 +72,11 @@ struct svm_softc {
 	uint8_t		*iopm_bitmap;    /* shared by all vcpus */
 	uint8_t		*msr_bitmap;    /* shared by all vcpus */
 	struct vm	*vm;
+	/* AMD SEV */
+	uint8_t sev_enable;
+	uint8_t sev_c_bit;		/* SEV encrypt bit position */
+	uint32_t handle;
+	uint32_t sev_asid;
 };
 
 #define	SVM_CTR0(vcpu, format)						\

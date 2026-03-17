@@ -30,7 +30,7 @@ struct pciid {
 };
 static struct sev_ops asp_sev_ops_impl;
 static int asp_detach(device_t dev);
-static int asp_hw_platform_init(struct asp_softc *sc);
+/* static int asp_hw_platform_init(struct asp_softc *sc); */
 static int asp_hw_platform_shutdown(struct asp_softc *sc);
 static int asp_hw_platform_status(struct asp_softc *sc, struct sev_platform_status *pstatus);
 /*
@@ -242,9 +242,10 @@ asp_attach(device_t dev)
 
 	hook_sev_ops(&asp_sev_ops_impl);
 
-	error = asp_hw_platform_init(sc);
+	/* error = asp_hw_platform_init(sc); */
 
 	/* Test for get SEV platform status */
+	/*
 	struct sev_platform_status pstatus;
 	error = asp_hw_platform_status(sc, &pstatus);
 	if (error != 0) {
@@ -266,6 +267,7 @@ asp_attach(device_t dev)
 	device_printf(sc->dev, "	API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
 	device_printf(sc->dev, "	State: %d\n", pstatus.state);
 	device_printf(sc->dev, "	Guests: %d\n", pstatus.guest_count);
+	*/
 
 fail:
 	if (error != 0) {
@@ -281,6 +283,8 @@ asp_detach(device_t dev)
 	struct asp_softc *sc;
 
 	sc = device_get_softc(dev);
+
+	asp_hw_platform_shutdown(sc);
 
 	bus_generic_detach(dev);
 	pci_disable_busmaster(dev);
@@ -589,6 +593,7 @@ asp_hw_guest_df_flush(struct asp_softc *sc)
 	 * The x86 system software must execute WBINVD 
 	 * before invoking the DF_FLUSH command.	
 	 */
+	wbinvd();
 
 	mtx_lock(&sc->mtx_lock);
 
@@ -597,6 +602,13 @@ asp_hw_guest_df_flush(struct asp_softc *sc)
 	mtx_unlock(&sc->mtx_lock);
 
 	return (error);
+}
+
+static int
+asp_hw_guest_launch_measure(struct asp_softc *sc)
+{
+	/* struct sev_launch_measure *lm; */
+	return (0);
 }
 
 static int

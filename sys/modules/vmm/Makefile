@@ -119,7 +119,8 @@ SRCS+=	vmcb.c		\
 	npt.c		\
 	ivrs_drv.c	\
 	amdvi_hw.c	\
-	svm_msr.c
+	svm_msr.c	\
+	svm_sev.c
 
 SRCS.BHYVE_SNAPSHOT=	vmm_snapshot.c
 

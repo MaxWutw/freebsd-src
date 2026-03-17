@@ -122,6 +122,41 @@ enum x2apic_state {
 #define	VM_INTINFO_HWEXCEPTION	(3 << 8)
 #define	VM_INTINFO_SWINTR	(4 << 8)
 
+/*
+ * The VM name has to fit into the pathname length constraints of devfs,
+ * governed primarily by SPECNAMELEN.  The length is the total number of
+ * characters in the full path, relative to the mount point and not 
+ * including any leading '/' characters.
+ * A prefix and a suffix are added to the name specified by the user.
+ * The prefix is usually "vmm/" or "vmm.io/", but can be a few characters
+ * longer for future use.
+ * The suffix is a string that identifies a bootrom image or some similar
+ * image that is attached to the VM. A separator character gets added to
+ * the suffix automatically when generating the full path, so it must be
+ * accounted for, reducing the effective length by 1.
+ * The effective length of a VM name is 229 bytes for FreeBSD 13 and 37
+ * bytes for FreeBSD 12.  A minimum length is set for safety and supports
+ * a SPECNAMELEN as small as 32 on old systems.
+ */
+#define VM_MAX_PREFIXLEN 10
+#define VM_MAX_SUFFIXLEN 15
+#define VM_MIN_NAMELEN   6
+#define VM_MAX_NAMELEN \
+    (SPECNAMELEN - VM_MAX_PREFIXLEN - VM_MAX_SUFFIXLEN - 1)
+
+/* AMD SEV command */
+enum sev_cmd {
+	VM_SEV_CMD_INIT = 0,
+	VM_SEV_CMD_PLATFORM_STATUS,
+	VM_SEV_CMD_LAUNCH_START,
+	VM_SEV_CMD_LAUNCH_UPDATE_DATA,
+	VM_SEV_CMD_LAUNCH_UPDATE_VMSA,
+	VM_SEV_CMD_LAUNCH_MEASURE,
+	VM_SEV_CMD_LAUNCH_FINISH,
+	VM_SEV_CMD_SHUTDOWN,
+	VM_SEV_CMD_GUEST_STATUS,
+};
+
 #ifdef _KERNEL
 #define	VMM_VCPU_MD_FIELDS						\
 	struct vlapic	*vlapic;	/* (i) APIC device model */	\
@@ -164,6 +199,7 @@ struct vm_eventinfo;
 struct vm_object;
 struct vm_guest_paging;
 struct pmap;
+struct vm_sev_cmd;
 enum snapshot_req;
 
 #define	DECLARE_VMMOPS_FUNC(ret_type, opname, args)		\
@@ -198,6 +234,30 @@ DECLARE_VMMOPS_FUNC(int, vcpu_snapshot, (void *vcpui,
     struct vm_snapshot_meta *meta));
 DECLARE_VMMOPS_FUNC(int, restore_tsc, (void *vcpui, uint64_t now));
 
+typedef int	(*vmm_init_func_t)(int ipinum);
+typedef int	(*vmm_cleanup_func_t)(void);
+typedef void	(*vmm_resume_func_t)(void);
+typedef void *	(*vmi_init_func_t)(struct vm *vm, struct pmap *pmap);
+typedef int	(*vmi_run_func_t)(void *vcpui, register_t rip,
+		    struct pmap *pmap, struct vm_eventinfo *info);
+typedef void	(*vmi_cleanup_func_t)(void *vmi);
+typedef void *	(*vmi_vcpu_init_func_t)(void *vmi, struct vcpu *vcpu,
+		    int vcpu_id);
+typedef void	(*vmi_vcpu_cleanup_func_t)(void *vcpui);
+typedef int	(*vmi_get_register_t)(void *vcpui, int num, uint64_t *retval);
+typedef int	(*vmi_set_register_t)(void *vcpui, int num, uint64_t val);
+typedef int	(*vmi_get_desc_t)(void *vcpui, int num, struct seg_desc *desc);
+typedef int	(*vmi_set_desc_t)(void *vcpui, int num, struct seg_desc *desc);
+typedef int	(*vmi_get_cap_t)(void *vcpui, int num, int *retval);
+typedef int	(*vmi_set_cap_t)(void *vcpui, int num, int val);
+typedef struct vmspace * (*vmi_vmspace_alloc)(vm_offset_t min, vm_offset_t max);
+typedef void	(*vmi_vmspace_free)(struct vmspace *vmspace);
+typedef struct vlapic * (*vmi_vlapic_init)(void *vcpui);
+typedef void	(*vmi_vlapic_cleanup)(struct vlapic *vlapic);
+typedef int	(*vmi_snapshot_vcpu_t)(void *vcpui, struct vm_snapshot_meta *meta);
+typedef int	(*vmi_restore_tsc_t)(void *vcpui, uint64_t now);
+typedef int (*vmm_enc_mem_t)(void *vmi, struct vm_sev_cmd *cmd);
+
 struct vmm_ops {
 	vmmops_modinit_t	modinit;	/* module wide initialization */
 	vmmops_modcleanup_t	modcleanup;
@@ -223,6 +283,11 @@ struct vmm_ops {
 	/* checkpoint operations */
 	vmmops_vcpu_snapshot_t	vcpu_snapshot;
 	vmmops_restore_tsc_t	restore_tsc;
+	vmi_snapshot_vcpu_t	vcpu_snapshot;
+	vmi_restore_tsc_t	restore_tsc;
+
+	/* Encrypt for confidential VM */
+	vmm_enc_mem_t		enc_mem;
 };
 
 extern const struct vmm_ops vmm_ops_intel;
@@ -264,6 +329,7 @@ void vm_exit_astpending(struct vcpu *vcpu, uint64_t rip);
 void vm_exit_reqidle(struct vcpu *vcpu, uint64_t rip);
 int vm_snapshot_req(struct vm *vm, struct vm_snapshot_meta *meta);
 int vm_restore_time(struct vm *vm);
+int vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd);
 
 #ifdef _SYS__CPUSET_H_
 cpuset_t vm_start_cpus(struct vm *vm, const cpuset_t *tostart);

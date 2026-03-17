@@ -1319,3 +1319,16 @@ vm_get_ioctls(size_t *len)
 	*len = vm_ioctl_ncmds;
 	return (NULL);
 }
+
+int
+vm_sev_command(struct vmctx *ctx, uint32_t cmd, void *data, size_t len)
+{
+	struct vm_sev_cmd sevcmd;
+
+	bzero(&sevcmd, sizeof(sevcmd));
+	sevcmd.cmd = cmd;
+	sevcmd.data = data;
+	sevcmd.len = len;
+
+	return (ioctl(ctx->fd, VM_SEV_COMMAND, &sevcmd));
+}

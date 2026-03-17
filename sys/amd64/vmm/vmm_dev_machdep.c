@@ -587,6 +587,9 @@ vmmdev_machdep_ioctl(struct vm *vm, struct vcpu *vcpu, u_long cmd, caddr_t data,
 		error = vm_restore_time(vm);
 		break;
 #endif
+	case VM_SEV_COMMAND:
+		error = vm_sev_ctl(vm, (struct vm_sev_cmd *)data);
+		break;
 	default:
 		error = ENOTTY;
 		break;

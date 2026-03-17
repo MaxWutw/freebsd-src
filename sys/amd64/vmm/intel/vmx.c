@@ -4304,4 +4304,5 @@ const struct vmm_ops vmm_ops_intel = {
 	.vcpu_snapshot	= vmx_vcpu_snapshot,
 	.restore_tsc	= vmx_restore_tsc,
 #endif
+	.enc_mem	= NULL,
 };
