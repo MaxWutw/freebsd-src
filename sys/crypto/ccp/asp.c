@@ -7,10 +7,12 @@
 #include <sys/rman.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
+#include <sys/smp.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
+#include <machine/cpufunc.h>
 #include <machine/bus.h>
 #include <machine/resource.h>
 
@@ -320,6 +322,18 @@ asp_detach(device_t dev)
 	return (0);
 }
 
+static void
+asp_wbinvd_action(void *arg __unused)
+{
+	wbinvd();
+}
+
+static void
+asp_wbinvd(void)
+{
+	smp_rendezvous(NULL, asp_wbinvd_action, NULL, NULL);
+}
+
 static int
 asp_wait(struct asp_softc *sc, uint32_t *status, int poll)
 {
@@ -404,6 +418,8 @@ asp_hw_platform_init(struct asp_softc *sc)
 
 	mtx_unlock(&sc->mtx_lock);
 
+	asp_wbinvd();
+
 	if (error)
 		return (error);
 
@@ -423,6 +439,7 @@ asp_hw_platform_shutdown(struct asp_softc *sc)
 
 	mtx_unlock(&sc->mtx_lock);
 
+	asp_wbinvd();
 
 	return (error);
 }
@@ -585,7 +602,7 @@ asp_hw_guest_activate(struct asp_softc *sc, struct sev_activate *gactivate)
 }
 
 static int
-asp_hw_guest_df_flush(struct asp_softc *sc)
+asp_hw_df_flush(struct asp_softc *sc)
 {
 	int error;
 
@@ -593,7 +610,7 @@ asp_hw_guest_df_flush(struct asp_softc *sc)
 	 * The x86 system software must execute WBINVD 
 	 * before invoking the DF_FLUSH command.	
 	 */
-	wbinvd();
+	asp_wbinvd();
 
 	mtx_lock(&sc->mtx_lock);
 
@@ -664,7 +681,7 @@ asp_hw_guest_shutdown(struct asp_softc *sc, struct sev_guest_shutdown_args *args
 	if (error)
 		return  (error);
 
-	error = asp_hw_guest_df_flush(sc);
+	error = asp_hw_df_flush(sc);
 	if (error)
 		return  (error);
 
@@ -758,6 +775,14 @@ sev_guest_shutdown(struct sev_guest_shutdown_args *args)
 	return asp_hw_guest_shutdown(g_asp_softc, args);
 }
 
+static int
+sev_df_flush(void)
+{
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_df_flush(g_asp_softc);
+}
+
 static device_method_t asp_methods[] = {
 	DEVMETHOD(device_probe, asp_probe),
 	DEVMETHOD(device_attach, asp_attach),
@@ -782,7 +807,8 @@ static struct sev_ops asp_sev_ops_impl = {
 	.guest_launch_update_data = sev_guest_launch_update_data,
 	.guest_launch_update_vmsa = sev_guest_launch_update_vmsa,
 	.guest_launch_finish = sev_guest_launch_finish,
-	.guest_shutdown = sev_guest_shutdown
+	.guest_shutdown = sev_guest_shutdown,
+	.df_flush = sev_df_flush
 };
 
 DRIVER_MODULE(asp, pci, asp_driver, NULL, NULL);

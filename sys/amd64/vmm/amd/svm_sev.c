@@ -133,6 +133,11 @@ svm_sev_activate(struct svm_softc *sc)
 {
 	struct sev_activate g_activate;
 
+	if (sevops_df_flush()) {
+		printf("%s: failed to df flush\n", __func__);
+		return (EINVAL);
+	}
+
 	bzero(&g_activate, sizeof(g_activate));
 	g_activate.handle = sc->handle;
 	g_activate.asid = sc->sev_asid;

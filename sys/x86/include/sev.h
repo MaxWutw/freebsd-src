@@ -26,6 +26,7 @@ DECLARE_SEVOPS_FUNC(int, guest_launch_update_data, (struct sev_launch_update_dat
 DECLARE_SEVOPS_FUNC(int, guest_launch_update_vmsa, (struct sev_launch_update_vmsa *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_finish, (struct sev_launch_finish *));
 DECLARE_SEVOPS_FUNC(int, guest_shutdown, (struct sev_guest_shutdown_args *));
+DECLARE_SEVOPS_FUNC(int, df_flush, (void));
 
 int hook_sev_ops(struct sev_ops *ops);
 void unhook_sev_ops(void);
@@ -129,6 +130,9 @@ struct sev_ops {
 	sevops_guest_launch_update_vmsa_t	guest_launch_update_vmsa;
 	sevops_guest_launch_finish_t		guest_launch_finish;
 	sevops_guest_shutdown_t				guest_shutdown;
+
+	/* utility */
+	sevops_df_flush_t	df_flush;
 };
 
 #endif /* _MACHINE_SEV_H_ */
