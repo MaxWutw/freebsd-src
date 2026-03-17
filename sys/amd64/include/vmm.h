@@ -143,6 +143,19 @@ enum x2apic_state {
 #define VM_MAX_NAMELEN \
     (SPECNAMELEN - VM_MAX_PREFIXLEN - VM_MAX_SUFFIXLEN - 1)
 
+/* AMD SEV command */
+enum sev_cmd {
+	VM_SEV_CMD_INIT = 0,
+	VM_SEV_CMD_PLATFORM_STATUS,
+	VM_SEV_CMD_LAUNCH_START,
+	VM_SEV_CMD_LAUNCH_UPDATE_DATA,
+	VM_SEV_CMD_LAUNCH_UPDATE_VMSA,
+	VM_SEV_CMD_LAUNCH_MEASURE,
+	VM_SEV_CMD_LAUNCH_FINISH,
+	VM_SEV_CMD_SHUTDOWN,
+	VM_SEV_CMD_GUEST_STATUS,
+};
+
 #ifdef _KERNEL
 #include <sys/kassert.h>
 
@@ -160,6 +173,7 @@ struct vmspace;
 struct vm_object;
 struct vm_guest_paging;
 struct pmap;
+struct vm_sev_cmd;
 enum snapshot_req;
 
 struct vm_eventinfo {
@@ -190,6 +204,7 @@ typedef struct vlapic * (*vmi_vlapic_init)(void *vcpui);
 typedef void	(*vmi_vlapic_cleanup)(struct vlapic *vlapic);
 typedef int	(*vmi_snapshot_vcpu_t)(void *vcpui, struct vm_snapshot_meta *meta);
 typedef int	(*vmi_restore_tsc_t)(void *vcpui, uint64_t now);
+typedef int (*vmm_enc_mem_t)(void *vmi, struct vm_sev_cmd *cmd);
 
 struct vmm_ops {
 	vmm_init_func_t		modinit;	/* module wide initialization */
@@ -215,6 +230,9 @@ struct vmm_ops {
 	/* checkpoint operations */
 	vmi_snapshot_vcpu_t	vcpu_snapshot;
 	vmi_restore_tsc_t	restore_tsc;
+
+	/* Encrypt for confidential VM */
+	vmm_enc_mem_t		enc_mem;
 };
 
 extern const struct vmm_ops vmm_ops_intel;
@@ -307,6 +325,7 @@ void vm_exit_astpending(struct vcpu *vcpu, uint64_t rip);
 void vm_exit_reqidle(struct vcpu *vcpu, uint64_t rip);
 int vm_snapshot_req(struct vm *vm, struct vm_snapshot_meta *meta);
 int vm_restore_time(struct vm *vm);
+int vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd);
 
 #ifdef _SYS__CPUSET_H_
 /*

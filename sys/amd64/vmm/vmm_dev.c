@@ -1079,6 +1079,9 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		error = vm_restore_time(sc->vm);
 		break;
 #endif
+	case VM_SEV_COMMAND:
+		error = vm_sev_ctl(sc->vm, (struct vm_sev_cmd *)data);
+		break;
 	default:
 		error = ENOTTY;
 		break;

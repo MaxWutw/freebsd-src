@@ -256,6 +256,7 @@ DEFINE_VMMOPS_IFUNC(int, vcpu_snapshot, (void *vcpui,
     struct vm_snapshot_meta *meta))
 DEFINE_VMMOPS_IFUNC(int, restore_tsc, (void *vcpui, uint64_t now))
 #endif
+DEFINE_VMMOPS_IFUNC(int, enc_mem, (void *vmi, struct vm_sev_cmd *cmd))
 
 SDT_PROVIDER_DEFINE(vmm);
 
@@ -3042,4 +3043,13 @@ vm_restore_time(struct vm *vm)
 	return (0);
 }
 #endif
+
+int
+vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd)
+{
+	if (&vmmops_enc_mem == NULL)
+		return (ENOTSUP);
+
+	return vmmops_enc_mem(vm->cookie, sevcmd);
+}
 MODULE_DEPEND(vmm, asp, 1, 1, 1);
