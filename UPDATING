@@ -12,6 +12,36 @@ Items affecting the ports and packages system can be found in
 /usr/ports/UPDATING.  Please read that file before updating system packages
 and/or ports.
 
+20250224:
+	14.3-RELEASE-p9	SA-26:04.jail
+			SA-26:05.route
+
+	Jail chroot escape via fd exchange with a different jail. [SA-26:04.jail]
+
+	Local DoS and possible privilege escalation via routing sockets. [SA-26:05.route]
+
+20250127:
+	14.3-RELEASE-p8	SA-26:01.openssl
+			SA-26:02.jail
+			EN-26:02.arm64
+			EN-26:03.vm
+
+	Fix multiple vulnerabilities in OpenSSL. [SA-26:01.openssl]
+
+	Jail escape by a privileged user via nullfs. [SA-26:02.jail]
+
+	arm64 SVE signal context misalignment. [EN-26:02.arm64]
+
+	The page fault handler fails to zero memory. [EN-26:03.vm]
+
+20251216:
+	14.3-RELEASE-p7	SA-25:11.ipfw
+			SA-25:12.rtsold
+
+	ipfw denial of service. [SA-25:11.ipfw]
+
+	Remote code execution via ND6 Router Advertisements. [SA-25:12.rtsold]
+
 20251126:
 	14.3-RELEASE-p6	SA-25:10.unbound
 
