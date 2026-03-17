@@ -2114,4 +2114,3 @@ vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd)
 
 	return vmmops_enc_mem(vm->cookie, sevcmd);
 }
-MODULE_DEPEND(vmm, asp, 1, 1, 1);

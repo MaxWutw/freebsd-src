@@ -233,30 +233,7 @@ DECLARE_VMMOPS_FUNC(void, vlapic_cleanup, (struct vlapic *vlapic));
 DECLARE_VMMOPS_FUNC(int, vcpu_snapshot, (void *vcpui,
     struct vm_snapshot_meta *meta));
 DECLARE_VMMOPS_FUNC(int, restore_tsc, (void *vcpui, uint64_t now));
-
-typedef int	(*vmm_init_func_t)(int ipinum);
-typedef int	(*vmm_cleanup_func_t)(void);
-typedef void	(*vmm_resume_func_t)(void);
-typedef void *	(*vmi_init_func_t)(struct vm *vm, struct pmap *pmap);
-typedef int	(*vmi_run_func_t)(void *vcpui, register_t rip,
-		    struct pmap *pmap, struct vm_eventinfo *info);
-typedef void	(*vmi_cleanup_func_t)(void *vmi);
-typedef void *	(*vmi_vcpu_init_func_t)(void *vmi, struct vcpu *vcpu,
-		    int vcpu_id);
-typedef void	(*vmi_vcpu_cleanup_func_t)(void *vcpui);
-typedef int	(*vmi_get_register_t)(void *vcpui, int num, uint64_t *retval);
-typedef int	(*vmi_set_register_t)(void *vcpui, int num, uint64_t val);
-typedef int	(*vmi_get_desc_t)(void *vcpui, int num, struct seg_desc *desc);
-typedef int	(*vmi_set_desc_t)(void *vcpui, int num, struct seg_desc *desc);
-typedef int	(*vmi_get_cap_t)(void *vcpui, int num, int *retval);
-typedef int	(*vmi_set_cap_t)(void *vcpui, int num, int val);
-typedef struct vmspace * (*vmi_vmspace_alloc)(vm_offset_t min, vm_offset_t max);
-typedef void	(*vmi_vmspace_free)(struct vmspace *vmspace);
-typedef struct vlapic * (*vmi_vlapic_init)(void *vcpui);
-typedef void	(*vmi_vlapic_cleanup)(struct vlapic *vlapic);
-typedef int	(*vmi_snapshot_vcpu_t)(void *vcpui, struct vm_snapshot_meta *meta);
-typedef int	(*vmi_restore_tsc_t)(void *vcpui, uint64_t now);
-typedef int (*vmm_enc_mem_t)(void *vmi, struct vm_sev_cmd *cmd);
+DECLARE_VMMOPS_FUNC(int, enc_mem, (void *vmi, struct vm_sev_cmd*));
 
 struct vmm_ops {
 	vmmops_modinit_t	modinit;	/* module wide initialization */
@@ -283,11 +260,9 @@ struct vmm_ops {
 	/* checkpoint operations */
 	vmmops_vcpu_snapshot_t	vcpu_snapshot;
 	vmmops_restore_tsc_t	restore_tsc;
-	vmi_snapshot_vcpu_t	vcpu_snapshot;
-	vmi_restore_tsc_t	restore_tsc;
 
 	/* Encrypt for confidential VM */
-	vmm_enc_mem_t		enc_mem;
+	vmmops_enc_mem_t		enc_mem;
 };
 
 extern const struct vmm_ops vmm_ops_intel;
