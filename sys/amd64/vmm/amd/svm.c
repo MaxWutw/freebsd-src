@@ -50,6 +50,7 @@
 #include <machine/specialreg.h>
 #include <machine/smp.h>
 #include <machine/vmm.h>
+#include <machine/vmm_dev.h>
 #include <machine/vmm_instruction_emul.h>
 #include <machine/vmm_snapshot.h>
 
