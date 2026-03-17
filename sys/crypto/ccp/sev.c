@@ -99,3 +99,11 @@ sevops_guest_shutdown(struct sev_guest_shutdown_args *args)
 		return (ENODEV);
 	return g_sev_ops->guest_shutdown(args);
 }
+
+int
+sevops_df_flush(void)
+{
+	if (g_sev_ops == NULL || g_sev_ops->df_flush == NULL)
+		return (ENODEV);
+	return g_sev_ops->df_flush();
+}
