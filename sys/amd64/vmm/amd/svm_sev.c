@@ -203,23 +203,63 @@ svm_sev_launch_start(struct svm_softc *sc)
 }
 
 int
-svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data *udata)
+svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata)
 {
-	/*
-	vm_paddr_t gpa, next_gpa;
-	vm_paddr_t hpa;
+	vm_paddr_t gpa, gpa_end;
+	size_t size, offset, len;
+	void *kva, *cookie;
 	int error;
 	struct sev_launch_update_data g_ludata;
 
+	gpa = udata->vaddr;
+	size = udata->length;
+	gpa_end = gpa + size;
 
-	gpa = udata->address;
-	size = udata->len;
-	*/
+	bzero(&g_ludata, sizeof(g_ludata));
+	g_ludata.handle = sc->handle;
 
-	/* There might be an alignment check, but currently we just skip it */
+	if (kva == NULL) {
+		printf("%s: failed to hold GPA 0x%lx (size: %lu)\n", __func__, gpa, size);
+		return (EFAULT);
+	}
+
+	for(offset = 0; offset < gpa_end;offset += len) {
+		len = MIN(PAGE_SIZE - ((gpa + offset) & PAGE_MASK), size - offset);
+
+		/* wire the virtual memory */
+		kva = vm_gpa_hold(sc->vm, gpa, size, VM_PROT_READ | VM_PROT_WRITE, &cookie);
+
+		g_ludata.paddr = vtophys((uint8_t *)kva + offset);
+		g_ludata.length = len;
+
+		error = sevops_guest_launch_update_data(&g_ludata);
+		if (error) {
+			break;
+			printf("%s: ASP hw failed at GPA 0x%lx\n", __func__, gpa + offset);
+		}
+
+		/* unwire the virtual memory */
+		vm_gpa_release(cookie);
+	}
 
 
 	return (0);
+}
+
+int
+svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure)
+{
+	int error;
+
+	bzero(lmeasure, sizeof(*lmeasure));
+	lmeasure->handle = sc->handle;
+
+	error = sevops_guest_launch_measure(lmeasure);
+	if (error) {
+		printf("%s: failed to get measurement from hardware\n", __func__);
+	}
+
+	return (error);
 }
 
 int
