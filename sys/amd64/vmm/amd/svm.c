@@ -1959,97 +1959,97 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 			 * supported machine are supports FlushByAsid.
 			 */
 			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
-			vcpu->eptgen = eptgen;
 		}
-
-		svm_set_dirty(vcpu, VMCB_CACHE_ASID);
 
 		return;
 	}
-
-	/*
-	 * The TLB entries associated with the vcpu's ASID are not valid
-	 * if either of the following conditions is true:
-	 *
-	 * 1. The vcpu's ASID generation is different than the host cpu's
-	 *    ASID generation. This happens when the vcpu migrates to a new
-	 *    host cpu. It can also happen when the number of vcpus executing
-	 *    on a host cpu is greater than the number of ASIDs available.
-	 *
-	 * 2. The pmap generation number is different than the value cached in
-	 *    the 'vcpustate'. This happens when the host invalidates pages
-	 *    belonging to the guest.
-	 *
-	 *	asidgen		eptgen	      Action
-	 *	mismatch	mismatch
-	 *	   0		   0		(a)
-	 *	   0		   1		(b1) or (b2)
-	 *	   1		   0		(c)
-	 *	   1		   1		(d)
-	 *
-	 * (a) There is no mismatch in eptgen or ASID generation and therefore
-	 *     no further action is needed.
-	 *
-	 * (b1) If the cpu supports FlushByAsid then the vcpu's ASID is
-	 *      retained and the TLB entries associated with this ASID
-	 *      are flushed by VMRUN.
-	 *
-	 * (b2) If the cpu does not support FlushByAsid then a new ASID is
-	 *      allocated.
-	 *
-	 * (c) A new ASID is allocated.
-	 *
-	 * (d) A new ASID is allocated.
-	 */
-
-	alloc_asid = false;
-	eptgen = atomic_load_long(&pmap->pm_eptgen);
-	ctrl->tlb_ctrl = VMCB_TLB_FLUSH_NOTHING;
-
-	if (vcpu->asid.gen != asid[cpu].gen) {
-		alloc_asid = true;	/* (c) and (d) */
-	} else if (vcpu->eptgen != eptgen) {
-		if (flush_by_asid())
-			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;	/* (b1) */
-		else
-			alloc_asid = true;			/* (b2) */
-	} else {
+	else {
 		/*
-		 * This is the common case (a).
+		 * The TLB entries associated with the vcpu's ASID are not valid
+		 * if either of the following conditions is true:
+		 *
+		 * 1. The vcpu's ASID generation is different than the host cpu's
+		 *    ASID generation. This happens when the vcpu migrates to a new
+		 *    host cpu. It can also happen when the number of vcpus executing
+		 *    on a host cpu is greater than the number of ASIDs available.
+		 *
+		 * 2. The pmap generation number is different than the value cached in
+		 *    the 'vcpustate'. This happens when the host invalidates pages
+		 *    belonging to the guest.
+		 *
+		 *	asidgen		eptgen	      Action
+		 *	mismatch	mismatch
+		 *	   0		   0		(a)
+		 *	   0		   1		(b1) or (b2)
+		 *	   1		   0		(c)
+		 *	   1		   1		(d)
+		 *
+		 * (a) There is no mismatch in eptgen or ASID generation and therefore
+		 *     no further action is needed.
+		 *
+		 * (b1) If the cpu supports FlushByAsid then the vcpu's ASID is
+		 *      retained and the TLB entries associated with this ASID
+		 *      are flushed by VMRUN.
+		 *
+		 * (b2) If the cpu does not support FlushByAsid then a new ASID is
+		 *      allocated.
+		 *
+		 * (c) A new ASID is allocated.
+		 *
+		 * (d) A new ASID is allocated.
 		 */
-		KASSERT(!alloc_asid, ("ASID allocation not necessary"));
-		KASSERT(ctrl->tlb_ctrl == VMCB_TLB_FLUSH_NOTHING,
-		    ("Invalid VMCB tlb_ctrl: %#x", ctrl->tlb_ctrl));
-	}
 
-	if (alloc_asid) {
-		if (++asid[cpu].num >= nasid) {
-			asid[cpu].num = 1;
-			if (++asid[cpu].gen == 0)
-				asid[cpu].gen = 1;
+		alloc_asid = false;
+		eptgen = atomic_load_long(&pmap->pm_eptgen);
+		ctrl->tlb_ctrl = VMCB_TLB_FLUSH_NOTHING;
+
+		if (vcpu->asid.gen != asid[cpu].gen) {
+			alloc_asid = true;	/* (c) and (d) */
+		} else if (vcpu->eptgen != eptgen) {
+			if (flush_by_asid())
+				ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;	/* (b1) */
+			else
+				alloc_asid = true;			/* (b2) */
+		} else {
 			/*
-			 * If this cpu does not support "flush-by-asid"
-			 * then flush the entire TLB on a generation
-			 * bump. Subsequent ASID allocation in this
-			 * generation can be done without a TLB flush.
+			 * This is the common case (a).
 			 */
-			if (!flush_by_asid())
-				ctrl->tlb_ctrl = VMCB_TLB_FLUSH_ALL;
+			KASSERT(!alloc_asid, ("ASID allocation not necessary"));
+			KASSERT(ctrl->tlb_ctrl == VMCB_TLB_FLUSH_NOTHING,
+				("Invalid VMCB tlb_ctrl: %#x", ctrl->tlb_ctrl));
 		}
-		vcpu->asid.gen = asid[cpu].gen;
-		vcpu->asid.num = asid[cpu].num;
 
-		ctrl->asid = vcpu->asid.num;
-		svm_set_dirty(vcpu, VMCB_CACHE_ASID);
-		/*
-		 * If this cpu supports "flush-by-asid" then the TLB
-		 * was not flushed after the generation bump. The TLB
-		 * is flushed selectively after every new ASID allocation.
-		 */
-		if (flush_by_asid())
-			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
+		if (alloc_asid) {
+			if (++asid[cpu].num >= nasid) {
+				asid[cpu].num = 1;
+				if (++asid[cpu].gen == 0)
+					asid[cpu].gen = 1;
+				/*
+				 * If this cpu does not support "flush-by-asid"
+				 * then flush the entire TLB on a generation
+				 * bump. Subsequent ASID allocation in this
+				 * generation can be done without a TLB flush.
+				 */
+				if (!flush_by_asid())
+					ctrl->tlb_ctrl = VMCB_TLB_FLUSH_ALL;
+			}
+			vcpu->asid.gen = asid[cpu].gen;
+			vcpu->asid.num = asid[cpu].num;
+
+			ctrl->asid = vcpu->asid.num;
+			svm_set_dirty(vcpu, VMCB_CACHE_ASID);
+			/*
+			 * If this cpu supports "flush-by-asid" then the TLB
+			 * was not flushed after the generation bump. The TLB
+			 * is flushed selectively after every new ASID allocation.
+			 */
+			if (flush_by_asid())
+				ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
+		}
 	}
+
 	vcpu->eptgen = eptgen;
+	svm_set_dirty(vcpu, VMCB_CACHE_ASID);
 
 	KASSERT(ctrl->asid != 0, ("Guest ASID must be non-zero"));
 	KASSERT(ctrl->asid == vcpu->asid.num,
@@ -2843,8 +2843,11 @@ static int
 svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 {
 	struct svm_softc *sc = vmi;
-	int error = 0;
-	struct sev_launch_update_data udata;
+	int error;
+	struct sev_launch_update_data_vm udata_vm;
+	struct sev_launch_measure lmeasure;
+
+	error = 0;
 
 	switch(sevcmd->cmd) {
 	case VM_SEV_CMD_INIT:
@@ -2856,14 +2859,18 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_LAUNCH_UPDATE_DATA:
-		error = copyin(sevcmd->data, &udata, sizeof(udata));
+		error = copyin(sevcmd->data, &udata_vm, sizeof(udata_vm));
 		if (error)
 			break;
 
-		error = svm_sev_launch_update_data(sc, &udata);
+		error = svm_sev_launch_update_data(sc, &udata_vm);
 		break;
 
 	case VM_SEV_CMD_LAUNCH_MEASURE:
+		error = svm_sev_launch_measure(sc, &lmeasure);
+		if (error == 0) {
+			error = copyout(&lmeasure, sevcmd->data, sizeof(lmeasure));
+		}
 		break;
 
 	case VM_SEV_CMD_LAUNCH_FINISH:

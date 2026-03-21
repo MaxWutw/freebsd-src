@@ -509,6 +509,8 @@ asp_hw_guest_status(struct asp_softc *sc, struct sev_guest_status *gstatus)
 	status = (struct sev_guest_status*)sc->cmd_kva;
 	bzero(status, sizeof(struct sev_guest_status));
 
+	status->handle = gstatus->handle;
+
 	error = asp_send_cmd(sc, SEV_CMD_GUEST_STATUS, sc->cmd_paddr);
 	
 	mtx_unlock(&sc->mtx_lock);
@@ -531,6 +533,11 @@ asp_hw_guest_launch_update_data(struct asp_softc *sc, struct sev_launch_update_d
 
 	ludata = (struct sev_launch_update_data*)sc->cmd_kva;
 	bzero(ludata, sizeof(struct sev_launch_update_data));
+
+	ludata->handle = gludata->handle;
+	ludata->paddr  = gludata->paddr;
+	ludata->length = gludata->length;
+
 	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_UPDATE_DATA, sc->cmd_paddr);
 
 	mtx_unlock(&sc->mtx_lock);
@@ -622,10 +629,25 @@ asp_hw_df_flush(struct asp_softc *sc)
 }
 
 static int
-asp_hw_guest_launch_measure(struct asp_softc *sc)
+asp_hw_guest_launch_measure(struct asp_softc *sc, struct sev_launch_measure *glmeasure)
 {
-	/* struct sev_launch_measure *lm; */
-	return (0);
+	struct sev_launch_measure *lmeasure;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	lmeasure = (struct sev_launch_measure*)sc->cmd_kva;
+	bzero(lmeasure, sizeof(struct sev_launch_measure));
+
+	lmeasure->handle = glmeasure->handle;
+	lmeasure->measure_paddr = glmeasure->measure_paddr;
+	lmeasure->measure_len = glmeasure->measure_len;
+
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_MEASURE, sc->cmd_paddr);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
 }
 
 static int
@@ -760,6 +782,14 @@ sev_guest_launch_update_vmsa(struct sev_launch_update_vmsa *glaunch_update_vmsa)
 }
 
 static int
+sev_guest_launch_measure(struct sev_launch_measure *glmeasure)
+{
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_measure(g_asp_softc, glmeasure);
+}
+
+static int
 sev_guest_launch_finish(struct sev_launch_finish *glaunch_finish)
 {
 	if (g_asp_softc == NULL)
@@ -806,6 +836,7 @@ static struct sev_ops asp_sev_ops_impl = {
 	.guest_status = sev_guest_status,
 	.guest_launch_update_data = sev_guest_launch_update_data,
 	.guest_launch_update_vmsa = sev_guest_launch_update_vmsa,
+	.guest_launch_measure = sev_guest_launch_measure,
 	.guest_launch_finish = sev_guest_launch_finish,
 	.guest_shutdown = sev_guest_shutdown,
 	.df_flush = sev_df_flush

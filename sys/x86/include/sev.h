@@ -12,6 +12,7 @@ struct sev_guest_status;
 struct sev_launch_start;
 struct sev_launch_update_data;
 struct sev_launch_update_vmsa;
+struct sev_launch_measure;
 struct sev_launch_finish;
 struct sev_activate;
 struct sev_guest_shutdown_args;
@@ -24,6 +25,7 @@ DECLARE_SEVOPS_FUNC(int, guest_activate, (struct sev_activate *));
 DECLARE_SEVOPS_FUNC(int, guest_status, (struct sev_guest_status *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_update_data, (struct sev_launch_update_data *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_update_vmsa, (struct sev_launch_update_vmsa *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_measure, (struct sev_launch_measure *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_finish, (struct sev_launch_finish *));
 DECLARE_SEVOPS_FUNC(int, guest_shutdown, (struct sev_guest_shutdown_args *));
 DECLARE_SEVOPS_FUNC(int, df_flush, (void));
@@ -77,6 +79,12 @@ struct sev_launch_start {
 	uint32_t session_len;	/* In */
 } __packed;
 
+/* This struct is for user space command deliver */
+struct sev_launch_update_data_vm {
+	uint32_t vaddr;
+	uint32_t length;
+};
+
 struct sev_launch_update_data {
 	uint32_t handle;	/* In */
 	uint32_t reserved;	/* - */
@@ -128,6 +136,7 @@ struct sev_ops {
 	sevops_guest_status_t 				guest_status;
 	sevops_guest_launch_update_data_t 	guest_launch_update_data;
 	sevops_guest_launch_update_vmsa_t	guest_launch_update_vmsa;
+	sevops_guest_launch_measure_t		guest_launch_measure;
 	sevops_guest_launch_finish_t		guest_launch_finish;
 	sevops_guest_shutdown_t				guest_shutdown;
 

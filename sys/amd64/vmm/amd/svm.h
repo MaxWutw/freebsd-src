@@ -32,7 +32,8 @@
 struct pcpu;
 struct svm_softc;
 struct svm_vcpu;
-struct sev_launch_update_data;
+struct sev_launch_update_data_vm;
+struct sev_launch_measure;
 
 /*
  * Guest register state that is saved outside the VMCB.
@@ -81,7 +82,8 @@ int svm_sev_hardware_init(void);
 void svm_sev_hardware_free(void);
 
 int svm_sev_launch_start(struct svm_softc *sc);
-int svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data *udata);
+int svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata);
+int svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure);
 int svm_sev_launch_finish(struct svm_softc *sc);
 int svm_sev_shutdown(struct svm_softc *sc);
 
