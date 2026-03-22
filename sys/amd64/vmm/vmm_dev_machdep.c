@@ -169,6 +169,8 @@ const struct vmmdev_ioctl vmmdev_machdep_ioctls[] = {
 	VMMDEV_IOCTL(VM_RTC_WRITE, 0),
 	VMMDEV_IOCTL(VM_RTC_GETTIME, 0),
 	VMMDEV_IOCTL(VM_RTC_SETTIME, 0),
+
+	VMMDEV_IOCTL(VM_SEV_COMMAND, 0),
 };
 const size_t vmmdev_machdep_ioctl_count = nitems(vmmdev_machdep_ioctls);
 

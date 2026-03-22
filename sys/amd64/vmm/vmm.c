@@ -33,6 +33,7 @@
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
 #include <sys/malloc.h>
+#include <sys/module.h>
 #include <sys/pcpu.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
@@ -2111,6 +2112,9 @@ vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd)
 {
 	if (&vmmops_enc_mem == NULL)
 		return (ENOTSUP);
+	printf("vm_sev_ctl\n");
 
 	return vmmops_enc_mem(vm->cookie, sevcmd);
 }
+
+MODULE_DEPEND(vmm, asp, 1, 1, 1);
