@@ -2112,7 +2112,6 @@ vm_sev_ctl(struct vm *vm, struct vm_sev_cmd *sevcmd)
 {
 	if (&vmmops_enc_mem == NULL)
 		return (ENOTSUP);
-	printf("vm_sev_ctl\n");
 
 	return vmmops_enc_mem(vm->cookie, sevcmd);
 }

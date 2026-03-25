@@ -93,6 +93,14 @@ sevops_guest_launch_finish(struct sev_launch_finish *glaunch_finish)
 }
 
 int
+sevops_guest_launch_measure(struct sev_launch_measure *glmeasure)
+{
+	if (g_sev_ops == NULL || g_sev_ops->guest_launch_measure == NULL)
+		return (ENODEV);
+	return g_sev_ops->guest_launch_measure(glmeasure);
+}
+
+int
 sevops_guest_shutdown(struct sev_guest_shutdown_args *args)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_shutdown == NULL)

@@ -6,6 +6,9 @@
 #include <vm/vm.h>
 #include <vm/pmap.h>
 
+#include <dev/vmm/vmm_mem.h>
+#include <dev/vmm/vmm_vm.h>
+
 #include <machine/vmm.h>
 
 #include <x86/sev.h>
@@ -205,38 +208,57 @@ svm_sev_launch_start(struct svm_softc *sc)
 int
 svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata)
 {
-	vm_paddr_t gpa, gpa_end;
+	vm_paddr_t gpa;
 	size_t size, offset, len;
 	void *kva, *cookie;
 	int error;
+	struct vcpu *vcpu;
 	struct sev_launch_update_data g_ludata;
 
 	gpa = udata->vaddr;
 	size = udata->length;
-	gpa_end = gpa + size;
+	printf("vaddr: %lu\n", gpa);
+	printf("size: %zu\n", size);
+	// gpa_end = gpa + size;
 
 	bzero(&g_ludata, sizeof(g_ludata));
 	g_ludata.handle = sc->handle;
 
-	if (kva == NULL) {
-		printf("%s: failed to hold GPA 0x%lx (size: %lu)\n", __func__, gpa, size);
-		return (EFAULT);
-	}
+	vcpu = vm_vcpu(sc->vm, 0);
 
-	for(offset = 0; offset < gpa_end;offset += len) {
+	return 0;
+	for(offset = 0; offset < size;offset += len) {
 		len = MIN(PAGE_SIZE - ((gpa + offset) & PAGE_MASK), size - offset);
 
 		/* wire the virtual memory */
-		kva = vm_gpa_hold(sc->vm, gpa, size, VM_PROT_READ | VM_PROT_WRITE, &cookie);
+		kva = vm_gpa_hold(vcpu, gpa + offset, len, VM_PROT_READ | VM_PROT_WRITE, &cookie);
+		if (kva == NULL) {
+			printf("%s: failed to hold GPA 0x%lx (size: %lu)\n", __func__, gpa, size);
+			return (EFAULT);
+		}
 
-		g_ludata.paddr = vtophys((uint8_t *)kva + offset);
+		g_ludata.paddr = vtophys(kva);
 		g_ludata.length = len;
+
+		/* for debug */
+		printf("[*] UPDATE_DATA GPA: 0x%lx -> KVA: %p -> HPA: 0x%lx\n",
+                gpa + offset, kva, g_ludata.paddr);
+		printf("[*] Memory Content (Before): %.30s\n", (char *)kva);
+		/* for debug */
 
 		error = sevops_guest_launch_update_data(&g_ludata);
 		if (error) {
-			break;
 			printf("%s: ASP hw failed at GPA 0x%lx\n", __func__, gpa + offset);
+			break;
 		}
+
+		/* for debug */
+		printf("[*] Memory Content (After) : ");
+        for (int i = 0; i < 16; i++) {
+            printf("%02x ", ((unsigned char *)kva)[i]);
+        }
+        printf("\n");
+		/* for debug */
 
 		/* unwire the virtual memory */
 		vm_gpa_release(cookie);
@@ -253,6 +275,7 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 
 	bzero(lmeasure, sizeof(*lmeasure));
 	lmeasure->handle = sc->handle;
+	lmeasure->measure_len = sizeof(lmeasure->measure) + sizeof(lmeasure->measure_nonce);
 
 	error = sevops_guest_launch_measure(lmeasure);
 	if (error) {

@@ -81,7 +81,7 @@ struct sev_launch_start {
 
 /* This struct is for user space command deliver */
 struct sev_launch_update_data_vm {
-	uint32_t vaddr;
+	uint64_t vaddr;
 	uint32_t length;
 };
 
@@ -104,6 +104,7 @@ struct sev_launch_measure {
 	uint32_t reserved;			/* - */
 	uint64_t measure_paddr;		/* In */
 	uint32_t measure_len;		/* In/Out */
+	uint32_t padding;			/* Alignment */
 	uint8_t measure[32];		/* Out */
 	uint8_t measure_nonce[16];  /* Out */
 } __packed;

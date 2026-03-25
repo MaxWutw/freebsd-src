@@ -640,10 +640,18 @@ asp_hw_guest_launch_measure(struct asp_softc *sc, struct sev_launch_measure *glm
 	bzero(lmeasure, sizeof(struct sev_launch_measure));
 
 	lmeasure->handle = glmeasure->handle;
-	lmeasure->measure_paddr = glmeasure->measure_paddr;
+	lmeasure->measure_paddr = sc->cmd_paddr + offsetof(struct sev_launch_measure, measure);
 	lmeasure->measure_len = glmeasure->measure_len;
 
 	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_MEASURE, sc->cmd_paddr);
+	if (error == 0) {
+		if (lmeasure->measure_len != glmeasure->measure_len) {
+			error = ERANGE;
+		} else {
+			bcopy(glmeasure->measure, lmeasure->measure_nonce, sizeof(lmeasure->measure));
+			bcopy(glmeasure->measure_nonce, lmeasure->measure_nonce, sizeof(lmeasure->measure_nonce));
+		}
+	}
 
 	mtx_unlock(&sc->mtx_lock);
 

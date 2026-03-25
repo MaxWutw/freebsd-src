@@ -2878,7 +2878,6 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 
 	switch(sevcmd->cmd) {
 	case VM_SEV_CMD_INIT:
-		printf("fajfi;sajfklsd\n");
 		error = svm_sev_hardware_init();
 		break;
 
