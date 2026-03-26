@@ -21,6 +21,14 @@ unhook_sev_ops(void)
 }
 
 int
+sevops_asp_wbinvd(void)
+{
+	if (g_sev_ops == NULL || g_sev_ops->asp_wbinvd == NULL)
+		return (ENODEV);
+	return g_sev_ops->asp_wbinvd();
+}
+
+int
 sevops_platform_init(void)
 {
 	if (g_sev_ops == NULL || g_sev_ops->platform_shutdown == NULL)

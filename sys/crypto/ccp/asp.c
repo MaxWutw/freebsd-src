@@ -328,10 +328,11 @@ asp_wbinvd_action(void *arg __unused)
 	wbinvd();
 }
 
-static void
+static int 
 asp_wbinvd(void)
 {
 	smp_rendezvous(NULL, asp_wbinvd_action, NULL, NULL);
+	return 0;
 }
 
 static int
@@ -372,8 +373,8 @@ asp_send_cmd(struct asp_softc *sc, uint32_t cmd, uint64_t paddr)
 	paddr_lo = paddr & 0xffffffff;
 	paddr_hi = (paddr >> 32) & 0xffffffff;
 	cmd_id = (cmd & 0x3ff) << 16;
-	device_printf(sc->dev, "High address: 0x%x\n", paddr_hi);
-	device_printf(sc->dev, "Low address: 0x%x\n", paddr_lo);
+	// device_printf(sc->dev, "High address: 0x%x\n", paddr_hi);
+	// device_printf(sc->dev, "Low address: 0x%x\n", paddr_lo);
 
 	/* nonzero if we are doing a cold boot */
 	if (!cold)
@@ -836,6 +837,7 @@ static driver_t asp_driver = {
 };
 
 static struct sev_ops asp_sev_ops_impl = {
+	.asp_wbinvd = asp_wbinvd,
 	.platform_init = sev_platform_init,
 	.platform_shutdown = sev_platform_shutdown,
 	.platform_status = sev_platform_status,

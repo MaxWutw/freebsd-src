@@ -226,7 +226,9 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 
 	vcpu = vm_vcpu(sc->vm, 0);
 
+	sevops_asp_wbinvd();
 	return 0;
+
 	for(offset = 0; offset < size;offset += len) {
 		len = MIN(PAGE_SIZE - ((gpa + offset) & PAGE_MASK), size - offset);
 

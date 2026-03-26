@@ -17,6 +17,7 @@ struct sev_launch_finish;
 struct sev_activate;
 struct sev_guest_shutdown_args;
 
+DECLARE_SEVOPS_FUNC(int, asp_wbinvd, (void));
 DECLARE_SEVOPS_FUNC(int, platform_init, (void));
 DECLARE_SEVOPS_FUNC(int, platform_shutdown, (void));
 DECLARE_SEVOPS_FUNC(int, platform_status, (struct sev_platform_status *));
@@ -126,6 +127,9 @@ struct sev_guest_shutdown_args {
 } __packed;
 
 struct sev_ops {
+	/* ASP hardware */
+	sevops_asp_wbinvd_t		asp_wbinvd;
+
 	/* platform sev ops */
 	sevops_platform_init_t 		platform_init;
 	sevops_platform_shutdown_t 	platform_shutdown;
