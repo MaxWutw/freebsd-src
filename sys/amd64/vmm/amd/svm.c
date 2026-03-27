@@ -2905,7 +2905,7 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_SHUTDOWN:
-		error = svm_sev_shutdown(sc);
+		error = svm_sev_guest_shutdown(sc);
 		break;
 
 	default:

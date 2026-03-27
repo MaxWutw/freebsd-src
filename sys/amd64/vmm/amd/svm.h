@@ -85,6 +85,6 @@ int svm_sev_launch_start(struct svm_softc *sc);
 int svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata);
 int svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure);
 int svm_sev_launch_finish(struct svm_softc *sc);
-int svm_sev_shutdown(struct svm_softc *sc);
+int svm_sev_guest_shutdown(struct svm_softc *sc);
 
 #endif /* _SVM_H_ */

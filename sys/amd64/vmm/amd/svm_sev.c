@@ -212,28 +212,22 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 	size_t size, offset, len;
 	void *kva, *cookie;
 	int error;
-	struct vcpu *vcpu;
 	struct sev_launch_update_data g_ludata;
 
 	gpa = udata->vaddr;
 	size = udata->length;
-	printf("vaddr: %lu\n", gpa);
-	printf("size: %zu\n", size);
 	// gpa_end = gpa + size;
 
 	bzero(&g_ludata, sizeof(g_ludata));
 	g_ludata.handle = sc->handle;
 
-	vcpu = vm_vcpu(sc->vm, 0);
-
 	sevops_asp_wbinvd();
-	return 0;
 
 	for(offset = 0; offset < size;offset += len) {
 		len = MIN(PAGE_SIZE - ((gpa + offset) & PAGE_MASK), size - offset);
 
 		/* wire the virtual memory */
-		kva = vm_gpa_hold(vcpu, gpa + offset, len, VM_PROT_READ | VM_PROT_WRITE, &cookie);
+		kva = vm_gpa_hold_global(sc->vm, gpa + offset, len, VM_PROT_READ | VM_PROT_WRITE, &cookie);
 		if (kva == NULL) {
 			printf("%s: failed to hold GPA 0x%lx (size: %lu)\n", __func__, gpa, size);
 			return (EFAULT);
@@ -251,6 +245,7 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		error = sevops_guest_launch_update_data(&g_ludata);
 		if (error) {
 			printf("%s: ASP hw failed at GPA 0x%lx\n", __func__, gpa + offset);
+			vm_gpa_release(cookie);
 			break;
 		}
 
@@ -303,7 +298,7 @@ svm_sev_launch_finish(struct svm_softc *sc)
 }
 
 int
-svm_sev_shutdown(struct svm_softc *sc)
+svm_sev_guest_shutdown(struct svm_softc *sc)
 {
 	struct sev_guest_shutdown_args g_shutdown;
 	

@@ -649,8 +649,7 @@ asp_hw_guest_launch_measure(struct asp_softc *sc, struct sev_launch_measure *glm
 		if (lmeasure->measure_len != glmeasure->measure_len) {
 			error = ERANGE;
 		} else {
-			bcopy(glmeasure->measure, lmeasure->measure_nonce, sizeof(lmeasure->measure));
-			bcopy(glmeasure->measure_nonce, lmeasure->measure_nonce, sizeof(lmeasure->measure_nonce));
+			bcopy(lmeasure, glmeasure, sizeof(struct sev_launch_measure));
 		}
 	}
 
