@@ -34,6 +34,8 @@
 
 #include <vmmapi.h>
 
+#include <x86/sev.h>
+
 #include "acpi.h"
 #include "atkbdc.h"
 #include "bhyverun.h"
@@ -348,6 +350,8 @@ int
 bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 {
 	int error;
+	struct sev_launch_measure measure;
+	struct vm_sev_cmd sevcmd;
 
 	error = init_msr();
 	if (error != 0)
@@ -363,6 +367,30 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 	if (error != 0)
 		return (error);
 	error = bootrom_loadrom(ctx);
+	if (get_config_bool_default("amd.sev", false)) {
+		bzero(&measure, sizeof(measure));
+		measure.measure_len = sizeof(measure.measure);
+
+		bzero(&sevcmd, sizeof(sevcmd));
+		sevcmd.cmd = VM_SEV_CMD_LAUNCH_MEASURE;
+		sevcmd.data = &measure;
+		sevcmd.len = sizeof(measure);
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+			errx(EX_OSERR, "Failed to MEASURE SEV guest");
+		printf("[+] MEASURE success! Measurement Hash:\n    ");
+		for (uint32_t i = 0; i < measure.measure_len; i++) {
+			printf("%02x", measure.measure[i]);
+		}
+		printf("\n");
+
+		bzero(&sevcmd, sizeof(sevcmd));
+		sevcmd.cmd = VM_SEV_CMD_LAUNCH_FINISH;
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+			errx(EX_OSERR, "Failed to FINISH SEV guest");
+
+		printf("SEV launch complete. VM is ready!\n");
+	}
+
 	if (error != 0)
 		return (error);
 

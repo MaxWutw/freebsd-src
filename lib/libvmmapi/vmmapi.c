@@ -52,11 +52,11 @@
 
 #include <vm/vm.h>
 #include <machine/vmm.h>
+#include <machine/vmm_dev.h>
+#include <dev/vmm/vmm_dev.h>
 #ifdef WITH_VMMAPI_SNAPSHOT
 #include <machine/vmm_snapshot.h>
 #endif
-
-#include <dev/vmm/vmm_dev.h>
 
 #include "vmmapi.h"
 #include "internal.h"

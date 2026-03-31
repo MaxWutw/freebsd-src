@@ -1603,9 +1603,20 @@ svm_vmexit(struct svm_softc *svm_sc, struct svm_vcpu *vcpu,
 		break;
 	case VMCB_EXIT_CPUID:
 		vmm_stat_incr(vcpu->vcpu, VMEXIT_CPUID, 1);
+		
+		eax = state->rax;
+
 		handled = x86_emulate_cpuid(vcpu->vcpu,
 		    &state->rax, &ctx->sctx_rbx, &ctx->sctx_rcx,
 		    &ctx->sctx_rdx);
+
+		if (svm_sc->sev_enable && eax == 0x8000001F) {
+			state->rax = (1ULL) << 1;
+			ctx->sctx_rbx = ((svm_sc->sev_c_bit) & 0x3f) | (1ULL << 6);
+			ctx->sctx_rcx = 0;
+			ctx->sctx_rdx = 0;
+			svm_set_dirty(vcpu, VMCB_CACHE_TPR);
+		}
 		break;
 	case VMCB_EXIT_HLT:
 		vmm_stat_incr(vcpu->vcpu, VMEXIT_HLT, 1);
@@ -1618,6 +1629,15 @@ svm_vmexit(struct svm_softc *svm_sc, struct svm_vcpu *vcpu,
 		break;
 	case VMCB_EXIT_NPF:
 		/* EXITINFO2 contains the faulting guest physical address */
+
+		/* Mask out the C-bit from the faulting GPA.
+		 * When a guest running with SEV accesses encrypted memory,
+		 * the hardware sets the C-bit in EXITINFO2. We must clear it
+		 * before passing it to the host's memory management functions.
+		 */
+		if (svm_sc->sev_enable) {
+			info2 &= ~(1ULL << svm_sc->sev_c_bit);
+		}
 		if (info1 & VMCB_NPF_INFO1_RSV) {
 			SVM_CTR2(vcpu, "nested page fault with "
 			    "reserved bits set: info1(%#lx) info2(%#lx)",

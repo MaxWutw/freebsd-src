@@ -44,6 +44,7 @@
 #include <sys/wait.h>
 
 #include <machine/atomic.h>
+#include <machine/vmm_dev.h>
 
 #ifndef WITHOUT_CAPSICUM
 #include <capsicum_helpers.h>
@@ -876,6 +877,22 @@ main(int argc, char *argv[])
 	if (error) {
 		fprintf(stderr, "Unable to setup memory (%d)\n", errno);
 		exit(BHYVE_EXIT_ERROR);
+	}
+
+	/* If AMD SEV enabled, we initialize and launch start for SEV */
+	if (get_config_bool_default("amd.sev", false)) {
+		struct vm_sev_cmd sevcmd;
+		printf("bhyve: Initializing AMD SEV...");
+
+		bzero(&sevcmd, sizeof(sevcmd));
+		sevcmd.cmd = VM_SEV_CMD_INIT;
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+			errx(EX_OSERR, "Failed to INIT SEV");
+
+		bzero(&sevcmd, sizeof(sevcmd));
+		sevcmd.cmd = VM_SEV_CMD_LAUNCH_START;
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+			errx(EX_OSERR, "Failed to LAUNCH_START SEV");
 	}
 
 	set_vcpu_affinities();

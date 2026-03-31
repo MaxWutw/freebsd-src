@@ -259,35 +259,6 @@ struct vm_sev_cmd {
 	size_t	 len;
 };
 
-struct vm_sev_platform_status {
-	uint8_t 	api_major;
-	uint8_t 	api_minor;
-	uint8_t 	state;
-	uint8_t 	owner;
-	uint32_t 	cfges_build;
-	uint32_t 	guest_count;
-};
-
-struct vm_sev_launch_start {
-	uint32_t handle;
-	uint32_t policy;
-	uint64_t dh_cert_paddr;
-	uint32_t dh_cert_len;
-	uint32_t reserved;
-	uint64_t session_paddr;
-	uint32_t session_len;
-};
-
-struct vm_sev_launch_finish {
-	uint32_t handle;
-};
-
-struct vm_sev_launch_upate_data {
-	uint32_t handle;
-	uint64_t paddr;
-	uint32_t len;
-};
-
 enum {
 	/* general routines */
 	IOCNUM_ABIVERS = 0,
@@ -379,12 +350,7 @@ enum {
 	IOCNUM_RESTORE_TIME = 115,
 
 	/* AMD SEV */
-	IOCNUM_SEV_CMD = 116,
-	IOCNUM_SEV_PLATFORM_INIT = 117,
-	IOCNUM_SEV_PLATFORM_STATUS = 118,
-	IOCNUM_SEV_PLATFORM_SHUTDOWN = 119,
-	IOCNUM_SEV_GUEST_LAUNCH_START = 120,
-	IOCNUM_SEV_GUEST_LAUNCH_FINISH = 121
+	IOCNUM_SEV_CMD = 116
 };
 
 #define	VM_RUN		\
@@ -513,14 +479,4 @@ enum {
 	_IOWR('v', IOCNUM_RESTORE_TIME, int)
 #define VM_SEV_COMMAND \
 	_IOW('v', IOCNUM_SEV_CMD, struct vm_sev_cmd)
-#define VM_SEV_INIT \
-	_IO('v', IOCNUM_SEV_PLATFORM_INIT)
-#define VM_SEV_SHUTDOWN \
-	_IO('v', IOCNUM_SEV_PLATFORM_SHUTDOWN)
-#define VM_SEV_PLATFORM_STATUS \
-	_IOR('v', IOCNUM_SEV_PLATFORM_STATUS, struct vm_sev_platform_status)
-#define VM_SEV_LAUNCH_START \
-	_IOW('v', IOCNUM_SEV_GUEST_LAUNCH_START, struct vm_sev_launch_start)
-#define VM_SEV_LAUNCH_FINISH \
-	_IOW('v', IOCNUM_SEV_GUSET_LAUNCH_FINISH, struct vm_sev_launch_finish)
 #endif

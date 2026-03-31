@@ -33,6 +33,9 @@
 
 #include <dev/vmm/vmm_mem.h>
 #include <machine/vmm.h>
+#include <machine/vmm_dev.h>
+
+#include <x86/sev.h>
 
 #include <err.h>
 #include <errno.h>
@@ -201,6 +204,9 @@ bootrom_loadrom(struct vmctx *ctx)
 	char *ptr, *romfile;
 	int fd, varfd, i, rv;
 	const char *bootrom, *varfile;
+	uint64_t rom_gpa;
+	struct sev_launch_update_data_vm udata;
+	struct vm_sev_cmd sevcmd;
 
 	rv = -1;
 	varfd = -1;
@@ -273,7 +279,7 @@ bootrom_loadrom(struct vmctx *ctx)
 
 	/* Map the bootrom into the guest address space */
 	if (bootrom_alloc(ctx, rom_size, PROT_READ | PROT_EXEC,
-	    BOOTROM_ALLOC_TOP, &ptr, NULL) != 0) {
+	    BOOTROM_ALLOC_TOP, &ptr, &rom_gpa) != 0) {
 		goto done;
 	}
 
@@ -285,6 +291,22 @@ bootrom_loadrom(struct vmctx *ctx)
 			    "file %s: %ld bytes", i, romfile, rlen);
 			goto done;
 		}
+	}
+
+	if (get_config_bool_default("amd.sev", false)) {
+		udata.vaddr = rom_gpa;
+		udata.length = rom_size;
+
+		bzero(&sevcmd, sizeof(sevcmd));
+		sevcmd.cmd = VM_SEV_CMD_LAUNCH_UPDATE_DATA;
+		sevcmd.data = &udata;
+		sevcmd.len = sizeof(udata);
+
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0) {
+			EPRINTLN("Failed to launch update data for BootROM");
+			goto done;
+		}
+		printf("sev launch update data for BootROM successfully\n");
 	}
 
 	if (varfd >= 0) {
