@@ -239,7 +239,6 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		/* for debug */
 		printf("[*] UPDATE_DATA GPA: 0x%lx -> KVA: %p -> HPA: 0x%lx\n",
                 gpa + offset, kva, g_ludata.paddr);
-		printf("[*] Memory Content (Before): %.30s\n", (char *)kva);
 		/* for debug */
 
 		error = sevops_guest_launch_update_data(&g_ludata);

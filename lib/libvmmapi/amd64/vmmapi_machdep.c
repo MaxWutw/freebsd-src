@@ -84,7 +84,8 @@ const char *vm_capstrmap[] = {
 	VM_GET_INTINFO,			\
 	VM_RESTART_INSTRUCTION,		\
 	VM_SNAPSHOT_REQ,		\
-	VM_RESTORE_TIME
+	VM_RESTORE_TIME,		\
+	VM_SEV_COMMAND
 
 const cap_ioctl_t vm_ioctl_cmds[] = {
 	VM_COMMON_IOCTLS,

@@ -207,6 +207,7 @@ bootrom_loadrom(struct vmctx *ctx)
 	uint64_t rom_gpa;
 	struct sev_launch_update_data_vm udata;
 	struct vm_sev_cmd sevcmd;
+	int prot;
 
 	rv = -1;
 	varfd = -1;
@@ -277,8 +278,12 @@ bootrom_loadrom(struct vmctx *ctx)
 		goto done;
 	}
 
+	prot = PROT_READ | PROT_EXEC;
+	if (get_config_bool_default("amd.sev", false)) {
+		prot |= PROT_WRITE;
+	}
 	/* Map the bootrom into the guest address space */
-	if (bootrom_alloc(ctx, rom_size, PROT_READ | PROT_EXEC,
+	if (bootrom_alloc(ctx, rom_size, prot,
 	    BOOTROM_ALLOC_TOP, &ptr, &rom_gpa) != 0) {
 		goto done;
 	}
