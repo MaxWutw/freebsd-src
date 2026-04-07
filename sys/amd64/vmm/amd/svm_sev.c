@@ -47,7 +47,7 @@ svm_sev_hardware_init(void)
 		return (EINVAL);
 	}
 
-	/* CPUID Fn8000_001F is for C-bit */
+	/* CPUID Fn8000_001F is for AMD SEV feature */
 	do_cpuid(0x8000001f, regs);
 	if ((regs[0] & 0x02) == 0) {
 		printf("SVM: SEV feature is not enabled\n");
@@ -159,25 +159,24 @@ svm_sev_launch_start(struct svm_softc *sc)
 	struct sev_launch_start		g_ls;
 	struct sev_guest_status		g_status;
 	int allocated_asid;
+	u_int regs[4];
 	
-	bzero(&p_status, sizeof(p_status));
-	if (sevops_platform_status(&p_status) != 0) {
-		printf("%s: failed to get sev platform status\n", __func__);
-		return (EINVAL);
-	}
-	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
-	printf("SVM: State: %d\n", p_status.state);
-	printf("SVM: Guests: %d\n", p_status.guest_count);
-
 	sc->sev_enable = true;
 	allocated_asid = svm_sev_alloc_asid();
 	if (allocated_asid <= 0) {
 		printf("%s: failed to allocate SEV ASID\n", __func__);
 		return (ENOMEM);
 	}
+
+	/* CPUID Fn8000_001F is for AMD SEV feature */
+	do_cpuid(0x8000001f, regs);
+	if ((regs[0] & 0x02) == 0) {
+		printf("SVM: SEV feature is not enabled\n");
+		return (EINVAL);
+	}
+
 	sc->sev_asid = allocated_asid;
-	printf("svm sev asid: %d\n", sc->sev_asid);
-	// svm_sc->sev_c_bit = regs[1] & 0x3f; // EBX[5:0]
+	sc->sev_c_bit = regs[1] & 0x3f; // EBX[5:0]
 
 	bzero(&g_ls, sizeof(g_ls));
 	/* Currently disable SEV-ES */
@@ -201,6 +200,15 @@ svm_sev_launch_start(struct svm_softc *sc)
 		return (EINVAL);
 	}
 	printf("%s: Successfully bouond SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
+
+	bzero(&p_status, sizeof(p_status));
+	if (sevops_platform_status(&p_status) != 0) {
+		printf("%s: failed to get sev platform status\n", __func__);
+		return (EINVAL);
+	}
+	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
+	printf("SVM: State: %d\n", p_status.state);
+	printf("SVM: Guests: %d\n", p_status.guest_count);
 
 	return (0);
 }
@@ -237,8 +245,17 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		g_ludata.length = len;
 
 		/* for debug */
-		printf("[*] UPDATE_DATA GPA: 0x%lx -> KVA: %p -> HPA: 0x%lx\n",
-                gpa + offset, kva, g_ludata.paddr);
+		/*
+		if (out < 200) {
+			printf("[*] UPDATE_DATA GPA: 0x%lx -> KVA: %p -> HPA: 0x%lx\n",
+					gpa + offset, kva, g_ludata.paddr);
+			printf("[*] Memory Content (Before) : ");
+			for (int i = 0; i < 16; i++) {
+				printf("%02x ", ((unsigned char *)kva)[i]);
+			}
+			printf("\n");
+		}
+		*/
 		/* for debug */
 
 		error = sevops_guest_launch_update_data(&g_ludata);
@@ -249,11 +266,15 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		}
 
 		/* for debug */
-		printf("[*] Memory Content (After) : ");
-        for (int i = 0; i < 16; i++) {
-            printf("%02x ", ((unsigned char *)kva)[i]);
-        }
-        printf("\n");
+		/*
+		if (out < 200) {
+			printf("[*] Memory Content (After) : ");
+			for (int i = 0; i < 16; i++) {
+				printf("%02x ", ((unsigned char *)kva)[i]);
+			}
+			printf("\n");
+		}
+		*/
 		/* for debug */
 
 		/* unwire the virtual memory */

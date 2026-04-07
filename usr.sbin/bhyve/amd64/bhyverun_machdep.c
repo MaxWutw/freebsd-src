@@ -367,6 +367,9 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 	if (error != 0)
 		return (error);
 	error = bootrom_loadrom(ctx);
+	if (error != 0)
+		return (error);
+
 	if (get_config_bool_default("amd.sev", false)) {
 		bzero(&measure, sizeof(measure));
 		measure.measure_len = sizeof(measure.measure);
@@ -390,9 +393,6 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 
 		printf("SEV launch complete. VM is ready!\n");
 	}
-
-	if (error != 0)
-		return (error);
 
 	return (0);
 }

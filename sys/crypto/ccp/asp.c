@@ -359,7 +359,7 @@ asp_wait(struct asp_softc *sc, uint32_t *status, int poll)
 		return (error);
 
 	*status = bus_read_4(sc->pci_resource, sc->reg_cmdresp);
-	device_printf(sc->dev, "ASP Command finished. Result: 0x%x\n", *status);
+	// device_printf(sc->dev, "ASP Command finished. Result: 0x%x\n", *status);
 	
 	return (0);
 }

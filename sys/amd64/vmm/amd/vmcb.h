@@ -283,7 +283,9 @@ struct vmcb_ctrl {
 	uint64_t exitinfo2;	/* 0x80, EXITINFO2 */
 	uint64_t exitintinfo;	/* 0x88, Interrupt exit value. */
 	uint64_t np_enable:1;   /* 0x90, Nested paging enable. */
-	uint64_t :63;
+	uint64_t sev_enable:1;	/* 0x91 Secure Encrypted Virtualization enable */
+	uint64_t es_enable:1;	/* 0x92 Encrypted State for SEV enable */
+	uint64_t :61;
 	uint8_t  pad4[0x10];	/* 0x98-0xA7 reserved. */
 	uint64_t eventinj;	/* 0xA8, Event injection. */
 	uint64_t n_cr3;		/* B0, Nested page table. */

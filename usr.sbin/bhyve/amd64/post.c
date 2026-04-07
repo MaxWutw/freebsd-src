@@ -29,6 +29,7 @@
 #include <sys/types.h>
 
 #include <assert.h>
+#include <stdio.h>
 
 #include "inout.h"
 #include "pci_lpc.h"
@@ -46,5 +47,21 @@ post_data_handler(struct vmctx *ctx __unused, int in,
 	return (0);
 }
 
+static int
+post_qemu_debugcon_handler(struct vmctx *ctx __unused, int in,
+    int port __unused, int bytes, uint32_t *eax, void *arg __unused)
+{
+	if (in) {
+		*eax = 0xe9;
+	} else {
+		if (bytes == 1) {
+			putchar(*eax & 0xff);
+			fflush(stdout);
+		}
+	}
+	return (0);
+}
+
 INOUT_PORT(post, 0x84, IOPORT_F_IN, post_data_handler);
+INOUT_PORT(qemu_debugcon, 0x0402, IOPORT_F_INOUT, post_qemu_debugcon_handler);
 SYSRES_IO(0x84, 1);

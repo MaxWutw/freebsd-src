@@ -130,6 +130,14 @@ svm_rdmsr(struct svm_vcpu *vcpu, u_int num, uint64_t *result, bool *retu)
 	case MSR_EXTFEATURES:
 		*result = 0;
 		break;
+	case MSR_SEV_STATUS:
+		/* SEV Enabled is 0 bit on MSR Fields */
+		if (vcpu->sc->sev_enable) {
+			*result = (1ULL << 0);
+		} else {
+			*result = 0;
+		}
+		break;
 	default:
 		error = EINVAL;
 		break;

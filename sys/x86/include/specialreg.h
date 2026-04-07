@@ -1271,6 +1271,7 @@
 #define	MSR_LS_CFG	0xc0011020
 #define	MSR_IC_CFG	0xc0011021	/* Instruction Cache Configuration */
 #define	MSR_DE_CFG	0xc0011029	/* Decode Configuration */
+#define MSR_SEV_STATUS 0xc0010131	/* Secure Encrypted Virtualization status */
 
 /* MSR_AMDK8_IPM */
 #define	AMDK8_SMIONCMPHALT	(1ULL << 27)

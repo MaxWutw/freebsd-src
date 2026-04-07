@@ -1994,6 +1994,7 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 	 */
 	if (sc->sev_enable) {
 		ctrl->asid = sc->sev_asid;
+		ctrl->sev_enable = 1;
 		
 		eptgen = atomic_load_long(&pmap->pm_eptgen);
 		ctrl->tlb_ctrl = VMCB_TLB_FLUSH_NOTHING;
@@ -2005,8 +2006,7 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 			 */
 			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
 		}
-
-		return;
+		svm_set_dirty(vcpu, VMCB_CACHE_ASID | VMCB_CACHE_NP);
 	}
 	else {
 		/*
@@ -2094,7 +2094,7 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 	}
 
 	vcpu->eptgen = eptgen;
-	svm_set_dirty(vcpu, VMCB_CACHE_ASID);
+	// svm_set_dirty(vcpu, VMCB_CACHE_ASID);
 
 	KASSERT(ctrl->asid != 0, ("Guest ASID must be non-zero"));
 	KASSERT(ctrl->asid == vcpu->asid.num,
@@ -2916,6 +2916,10 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 	case VM_SEV_CMD_LAUNCH_MEASURE:
 		error = svm_sev_launch_measure(sc, &lmeasure);
 		if (error == 0) {
+			for (uint32_t i = 0; i < lmeasure.measure_len; i++) {
+				printf("%02x", lmeasure.measure[i]);
+			}
+			printf("\n");
 			error = copyout(&lmeasure, sevcmd->data, sizeof(lmeasure));
 		}
 		break;

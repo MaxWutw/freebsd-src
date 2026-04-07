@@ -109,6 +109,12 @@ emulate_inout(struct vmctx *ctx, struct vcpu *vcpu, struct vm_exit *vmexit)
 	uint64_t gla, index, iterations, count;
 	struct vm_inout_str *vis;
 	struct iovec iov[2];
+	/*
+	printf("[DEBUG IO] port: 0x%04x, dir: %s, val: 0x%08x\n",
+			vmexit->u.inout.port,
+			vmexit->u.inout.in ? "IN" : "OUT",
+			vmexit->u.inout.eax);
+	*/
 
 	bytes = vmexit->u.inout.bytes;
 	in = vmexit->u.inout.in;

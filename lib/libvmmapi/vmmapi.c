@@ -1327,7 +1327,6 @@ int
 vm_sev_command(struct vmctx *ctx, uint32_t cmd, void *data, size_t len)
 {
 	struct vm_sev_cmd sevcmd;
-	int ret;
 
 	bzero(&sevcmd, sizeof(sevcmd));
 	sevcmd.cmd = cmd;
