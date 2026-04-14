@@ -62,10 +62,12 @@ svm_sev_hardware_init(void)
 		return (ENOMEM);
 	}
 
+	/*
 	if (sevops_platform_init() != 0) {
 		printf("SEV: Failed to initialize ASP SEV hardware platform\n");
 		return (EINVAL);
 	}
+	*/
 
 	mtx_init(&sev_asid_mtx, "sev_asid", NULL, MTX_DEF);
 	sev_asid_bitmap = bit_alloc(sev_asid_max, M_DEVBUF, M_WAITOK | M_ZERO);
@@ -114,7 +116,7 @@ svm_sev_alloc_asid(void)
 	return (asid);
 }
 
-static void
+void
 svm_sev_free_asid(uint32_t asid)
 {
 	if (!sev_hardware_supported)

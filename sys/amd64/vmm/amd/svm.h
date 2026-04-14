@@ -81,6 +81,8 @@ struct vm_sev_cmd;
 int svm_sev_hardware_init(void);
 void svm_sev_hardware_free(void);
 
+void svm_sev_free_asid(uint32_t asid);
+
 int svm_sev_launch_start(struct svm_softc *sc);
 int svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata);
 int svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure);

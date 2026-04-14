@@ -277,6 +277,7 @@ svm_modinit(int ipinum)
 	/* Enable SVM on all CPUs */
 	hsave = kmem_malloc((mp_maxid + 1) * PAGE_SIZE, M_WAITOK | M_ZERO);
 	smp_rendezvous(NULL, svm_enable, NULL, NULL);
+	svm_sev_hardware_init();
 
 	return (0);
 }
@@ -641,14 +642,17 @@ svm_init(struct vm *vm, pmap_t pmap)
 	/* Intercept access to all I/O ports. */
 	memset(svm_sc->iopm_bitmap, 0xFF, SVM_IO_BITMAP_SIZE);
 
-	svm_sev_hardware_init();
-	/* Get AMD SEV Platform status */
-	struct sev_platform_status pstatus;
-	if (sevops_platform_status(&pstatus) == 0) {
-		printf("SVM: SEV API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
-		printf("SVM: State: %d\n", pstatus.state);
-		printf("SVM: Guests: %d\n", pstatus.guest_count);
+	/*
+	if (!svm_sc->sev_enable) {
+		svm_sev_hardware_init();
+		struct sev_platform_status pstatus;
+		if (sevops_platform_status(&pstatus) == 0) {
+			printf("SVM: SEV API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
+			printf("SVM: State: %d\n", pstatus.state);
+			printf("SVM: Guests: %d\n", pstatus.guest_count);
+		}
 	}
+	*/
 
 	return (svm_sc);
 }
@@ -2342,10 +2346,12 @@ svm_cleanup(void *vmi)
 {
 	struct svm_softc *sc = vmi;
 
+	svm_sev_free_asid(sc->sev_asid);
+	svm_sev_guest_shutdown(sc);
 	free(sc->iopm_bitmap, M_SVM);
 	free(sc->msr_bitmap, M_SVM);
 	free(sc, M_SVM);
-	svm_sev_hardware_free();
+	// svm_sev_hardware_free();
 }
 
 static register_t *
