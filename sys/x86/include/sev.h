@@ -50,6 +50,23 @@ struct sev_platform_status {
 	uint32_t 	guest_count;	/* Out */
 } __packed;
 
+/* user space structure for pdh_cert_export */
+struct sev_user_pdh_cert_export {
+	uint64_t 	pdh_cert_vaddr;	/* In */
+	uint32_t	pdh_cert_len;	/* In/Out */
+	uint64_t	certs_vaddr;	/* In */
+	uint32_t	certs_len;		/* In/Out */
+};
+
+/* kernel space structure for pdh_cert_export */
+struct sev_pdh_cert_export {
+	uint64_t 	pdh_cert_paddr;	/* In */
+	uint32_t	pdh_cert_len;	/* In/Out */
+	uint32_t 	reserved;		/* - */
+	uint64_t	certs_paddr;	/* In */
+	uint32_t	certs_len;		/* In/Out */
+} __packed;
+
 struct sev_activate {
 	uint32_t handle;	/* In */
 	uint32_t asid;		/* In */

@@ -3,6 +3,7 @@
 #include <sys/kernel.h>
 #include <sys/mutex.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
 #include <sys/bus.h>
 #include <sys/rman.h>
 #include <sys/types.h>
@@ -32,9 +33,10 @@ struct pciid {
 };
 static struct sev_ops asp_sev_ops_impl;
 static int asp_detach(device_t dev);
-/* static int asp_hw_platform_init(struct asp_softc *sc); */
+static int asp_hw_platform_init(struct asp_softc *sc);
 static int asp_hw_platform_shutdown(struct asp_softc *sc);
 static int asp_hw_platform_status(struct asp_softc *sc, struct sev_platform_status *pstatus);
+static int asp_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag, struct thread *td);
 /*
 int sev_platform_init(struct asp_softc *sc);
 int sev_platform_shutdown(struct asp_softc *sc);
@@ -47,6 +49,11 @@ int sev_guest_launch_finish(struct asp_softc *sc, struct sev_launch_finish *gfin
 int sev_guest_activate(struct asp_softc *sc, struct sev_activate *gactivate);
 int sev_guest_shutdown(struct asp_softc *sc, struct sev_guest_shutdown_args *args);
 */
+static struct cdevsw asp_cdevsw = {
+	.d_version = D_VERSION,
+	.d_name = "sev",
+	.d_ioctl = asp_ioctl,
+};
 
 static int
 asp_probe(device_t dev)
@@ -136,11 +143,17 @@ asp_attach(device_t dev)
 {
 	struct asp_softc *sc;
 	uint32_t val;
-	int error;
+	int error = 0;
 	int msixc;
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
+	sc->sev_cdev = make_dev(&asp_cdevsw, 0, UID_ROOT, GID_WHEEL, 0600, "sev");
+	if (sc->sev_cdev == NULL) {
+		device_printf(dev, "Failed to create /dev/sev\n");
+		goto fail;
+	}
+	sc->sev_cdev->si_drv1 = sc;
 
 	/* softc get base register */
 	sc->reg_cmdresp = ASP_REG_CMDRESP;
@@ -153,13 +166,13 @@ asp_attach(device_t dev)
 
 	error = asp_map_pci_bar(dev);
 	if (error != 0) {
-		device_printf(sc->dev, "%s: Failed to map BAR(s)\n", __func__);
+		device_printf(sc->dev, "Failed to map BAR(s)\n");
 		goto fail;
 	}
 
 	error = pci_enable_busmaster(dev);
 	if (error != 0) {
-		device_printf(sc->dev, "%s: Failed to enable busmaster\n", __func__);
+		device_printf(sc->dev, "Failed to enable busmaster\n");
 		goto fail;
 	}
 
@@ -167,7 +180,7 @@ asp_attach(device_t dev)
 	msixc = 1;
 	error = pci_alloc_msix(sc->dev, &msixc);
 	if (error != 0) {
-		device_printf(sc->dev, "%s: Failed to alloccate IRQ resource\n", __func__);
+		device_printf(sc->dev, "Failed to alloccate IRQ resource\n");
 		goto fail;
 	}
 
@@ -177,7 +190,7 @@ asp_attach(device_t dev)
 			INTR_TYPE_MISC | INTR_MPSAFE, NULL, asp_intr_handler,
 			sc, &sc->irq_tag);
 	if (error != 0) {
-		device_printf(sc->dev, "%s: Failed to setup interrupt handler\n", __func__);
+		device_printf(sc->dev, "Failed to setup interrupt handler\n");
 		goto fail;
 	}
 
@@ -236,6 +249,37 @@ asp_attach(device_t dev)
 		goto fail;
 	}
 
+	/* Allocate DMA for certificate buffer */
+	error = bus_dma_tag_create(sc->parent_dma_tag,
+			PAGE_SIZE,
+			0,
+			BUS_SPACE_MAXADDR,
+			BUS_SPACE_MAXADDR,
+			NULL, NULL,
+			ASP_CERT_TOTAL_SIZE,
+			1,
+			ASP_CERT_TOTAL_SIZE,
+			0,
+			NULL, NULL,
+			&sc->cert_dma_tag);
+	if (error != 0) {
+		device_printf(sc->dev, "Failed to create command DMA tag\n");
+		goto fail;
+	}
+	error = bus_dmamem_alloc(sc->cert_dma_tag, (void **)&sc->certs_kva,
+							BUS_DMA_WAITOK | BUS_DMA_ZERO, &sc->cert_dma_map);
+	if (error != 0) {
+		device_printf(sc->dev, "Failed to allocate command DMA map\n");
+		goto fail;
+	}
+
+	error = bus_dmamap_load(sc->cert_dma_tag, sc->cert_dma_map, sc->certs_kva,
+							ASP_CERT_TOTAL_SIZE, asp_dma_cb, &sc->certs_paddr, BUS_DMA_NOWAIT);
+	if (error != 0) {
+		device_printf(sc->dev, "Failed to load memory\n");
+		goto fail;
+	}
+
 	/* Enable ASP interrupt */
 	bus_write_4(sc->pci_resource, sc->reg_inten, -1);
 
@@ -244,14 +288,18 @@ asp_attach(device_t dev)
 
 	hook_sev_ops(&asp_sev_ops_impl);
 
-	/* error = asp_hw_platform_init(sc); */
+	error = asp_hw_platform_init(sc);
+	if (error != 0) {
+		device_printf(sc->dev, "Failed to initialize ASP SEV hardware platform\n");
+		goto fail;
+	}
 
 	/* Test for get SEV platform status */
 	/*
 	struct sev_platform_status pstatus;
 	error = asp_hw_platform_status(sc, &pstatus);
 	if (error != 0) {
-		device_printf(dev, "%s: Failed to get SEV platform status\n", __func__);
+		device_printf(dev, "Failed to get SEV platform status\n");
 		goto fail;
 	}
 	device_printf(sc->dev, "SEV status:\n");
@@ -262,7 +310,7 @@ asp_attach(device_t dev)
 	asp_hw_platform_shutdown(sc);
 	error = asp_hw_platform_status(sc, &pstatus);
 	if (error != 0) {
-		device_printf(dev, "%s: Failed to get SEV platform status\n", __func__);
+		device_printf(dev, "Failed to get SEV platform status\n");
 		goto fail;
 	}
 	device_printf(sc->dev, "SEV status:\n");
@@ -271,10 +319,9 @@ asp_attach(device_t dev)
 	device_printf(sc->dev, "	Guests: %d\n", pstatus.guest_count);
 	*/
 
+	return (0);
 fail:
-	if (error != 0) {
-		asp_detach(dev);
-	}
+	asp_detach(dev);
 
 	return (error);
 }
@@ -285,6 +332,9 @@ asp_detach(device_t dev)
 	struct asp_softc *sc;
 
 	sc = device_get_softc(dev);
+
+	if (sc->sev_cdev)
+		destroy_dev(sc->sev_cdev);
 
 	asp_hw_platform_shutdown(sc);
 
@@ -300,14 +350,24 @@ asp_detach(device_t dev)
 
 	asp_ummap_pci_bar(dev);
 
-	if (sc->cmd_dma_map != 0)
+	/* cleanup for DMA */
+	if (sc->cmd_paddr != 0)
 		bus_dmamap_unload(sc->cmd_dma_tag, sc->cmd_dma_map);
+
+	if (sc->certs_paddr != 0)
+		bus_dmamap_unload(sc->cert_dma_tag, sc->cert_dma_map);
 
 	if (sc->cmd_dma_map != 0)
 		bus_dmamem_free(sc->cmd_dma_tag, sc->cmd_kva, sc->cmd_dma_map);
 
+	if (sc->cert_dma_map != 0)
+		bus_dmamem_free(sc->cert_dma_tag, sc->certs_kva, sc->cert_dma_map);
+
 	if (sc->cmd_dma_tag != 0)
 		bus_dma_tag_destroy(sc->cmd_dma_tag);
+
+	if (sc->cert_dma_tag != 0)
+		bus_dma_tag_destroy(sc->cert_dma_tag);
 
 	if (sc->parent_dma_tag != 0)
 		bus_dma_tag_destroy(sc->parent_dma_tag);
@@ -408,6 +468,7 @@ asp_hw_platform_init(struct asp_softc *sc)
 
 	init = (struct sev_init *)sc->cmd_kva;
 	if (init == NULL) {
+		mtx_unlock(&sc->mtx_lock);
 		return (ENOMEM);
 	}
 	
@@ -456,19 +517,47 @@ asp_hw_platform_status(struct asp_softc *sc, struct sev_platform_status *pstatus
 	status_data = (struct sev_platform_status*)sc->cmd_kva;
 	bzero(status_data, sizeof(struct sev_platform_status));
 	if (status_data == NULL) {
+		mtx_unlock(&sc->mtx_lock);
 		return (ENOMEM);
 	}
 
 	error = asp_send_cmd(sc, SEV_CMD_PLATFORM_STATUS, sc->cmd_paddr);
+	if (error == 0)
+		bcopy(status_data, pstatus, sizeof(struct sev_platform_status));
+
+	mtx_unlock(&sc->mtx_lock);
+	
+	return (error);
+}
+
+static int
+asp_hw_platform_pdh_cert_export(struct asp_softc *sc, struct sev_pdh_cert_export *ppdh_cert_export)
+{
+	struct sev_pdh_cert_export *pdh_cert_export;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	pdh_cert_export = (struct sev_pdh_cert_export*)sc->cmd_kva;
+	if (pdh_cert_export == NULL) {
+		mtx_unlock(&sc->mtx_lock);
+		return (ENOMEM);
+	}
+	bzero(pdh_cert_export, sizeof(struct sev_pdh_cert_export));
+
+	pdh_cert_export->pdh_cert_paddr = ppdh_cert_export->pdh_cert_paddr;
+	pdh_cert_export->pdh_cert_len 	= ppdh_cert_export->pdh_cert_len;
+	pdh_cert_export->certs_paddr	= ppdh_cert_export->certs_paddr;
+	pdh_cert_export->certs_len		= ppdh_cert_export->certs_len;
+
+	error = asp_send_cmd(sc, SEV_CMD_PDH_CERT_EXPORT, sc->cmd_paddr);
+
+	ppdh_cert_export->pdh_cert_len 	= pdh_cert_export->pdh_cert_len;
+	ppdh_cert_export->certs_len 	= pdh_cert_export->certs_len;
 
 	mtx_unlock(&sc->mtx_lock);
 
-	if (error)
-		return (error);
-
-	bcopy(status_data, pstatus, sizeof(struct sev_platform_status));
-	
-	return (0);
+	return (error);
 }
 
 static int
@@ -513,15 +602,12 @@ asp_hw_guest_status(struct asp_softc *sc, struct sev_guest_status *gstatus)
 	status->handle = gstatus->handle;
 
 	error = asp_send_cmd(sc, SEV_CMD_GUEST_STATUS, sc->cmd_paddr);
+	if (error == 0)
+		bcopy(status, gstatus, sizeof(struct sev_guest_status));
 	
 	mtx_unlock(&sc->mtx_lock);
 
-	if (error)
-		return (error);
-
-	bcopy(status, gstatus, sizeof(struct sev_guest_status));
-
-	return (0);
+	return (error);
 }
 
 static int
@@ -819,6 +905,66 @@ sev_df_flush(void)
 	if (g_asp_softc == NULL)
 		return (ENXIO);
 	return asp_hw_df_flush(g_asp_softc);
+}
+
+static int
+asp_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag, struct thread *td)
+{
+	struct asp_softc *sc = dev->si_drv1;
+	struct sev_user_pdh_cert_export *pdh_cert_export_user;
+	struct sev_pdh_cert_export ppdh_cert_export;
+	int error = 0;
+
+	switch (cmd) {
+	case ASP_IOC_PDH_CERT_EXPORT:
+		pdh_cert_export_user = (struct sev_user_pdh_cert_export*)data;
+
+		bzero(&ppdh_cert_export, sizeof(struct sev_pdh_cert_export));
+
+		ppdh_cert_export.pdh_cert_len 	= pdh_cert_export_user->pdh_cert_len;
+		ppdh_cert_export.certs_len = pdh_cert_export_user->certs_len;
+		if (ppdh_cert_export.pdh_cert_len != 0)
+			ppdh_cert_export.pdh_cert_paddr = sc->certs_paddr;
+		if (ppdh_cert_export.certs_len != 0)
+			ppdh_cert_export.certs_paddr = sc->certs_paddr + SEV_CERT_SIZE;
+
+		error = asp_hw_platform_pdh_cert_export(sc, &ppdh_cert_export);
+		pdh_cert_export_user->pdh_cert_len 	= ppdh_cert_export.pdh_cert_len;
+		pdh_cert_export_user->certs_len		= ppdh_cert_export.certs_len;
+		/* 
+		 * If the PDH_CERT_LEN or CERT_LEN fields are too small, the required length is
+		 * written out to those fields and an error is returned.
+		 * Therefore we record the certificate length before error detection. 
+		 */
+		if (error != 0) {
+			device_printf(sc->dev, "ASP PDH certificate export failed.\n");
+			if (error == EIO)
+				error = 0;
+			return (error);
+		}
+
+		if (pdh_cert_export_user->pdh_cert_len != 0) {
+			error = copyout(sc->certs_kva, (void*)pdh_cert_export_user->pdh_cert_vaddr, pdh_cert_export_user->pdh_cert_len);
+			if (error != 0) {
+				device_printf(sc->dev, "ASP PDH certificate copyout failed.\n");
+				return (error);
+			}
+		}
+
+		if (pdh_cert_export_user->certs_len != 0) {
+			void *certs_kva = (void*)((uint8_t*)sc->certs_kva + SEV_CERT_SIZE);
+			error = copyout(certs_kva, (void*)pdh_cert_export_user->certs_vaddr, pdh_cert_export_user->certs_len);
+			if (error != 0) {
+				device_printf(sc->dev, "ASP PDH certificate copyout failed.\n");
+				return (error);
+			}
+		} break;
+
+	default:
+		break;
+	}
+
+	return (error);
 }
 
 static device_method_t asp_methods[] = {

@@ -44,10 +44,23 @@
 #define SEV_STATUS_MASK				0xffff
 #define SEV_STATUS_SUCCESS			0x0000
 
+/* 
+ * Maximum certificate size is 2084 bytes,
+ * and PDH, PEK, CEK, OCA certificate have
+ * total (4 * 2084) bytes.
+ */
+#define SEV_CERT_SIZE 			0x0824
+#define SEV_CERT_CHAIN_SIZE		0x186c
+#define SEV_CERT_TOTAL_SIZE		(SEV_CERT_SIZE + SEV_CERT_CHAIN_SIZE)
+#define ASP_CERT_TOTAL_SIZE		(3 * PAGE_SIZE)
 #define SEV_TMR_SIZE (1024 * 1024)
+
+/* ASP ioctl definition */
+#define ASP_IOC_PDH_CERT_EXPORT _IOWR('s', 1, struct sev_user_pdh_cert_export)
 
 struct asp_softc {
 	device_t dev;
+	struct cdev *sev_cdev;
 	bool detaching;
 	int32_t cmd_size;
 
@@ -71,12 +84,18 @@ struct asp_softc {
 	bus_size_t		reg_inten;
 	bus_size_t		reg_intsts;
 
-	/* DMA Resources */
+	/* Command DMA Resources */
 	bus_dma_tag_t 	parent_dma_tag;
 	bus_dma_tag_t 	cmd_dma_tag;
 	bus_dmamap_t 	cmd_dma_map;
 	void			*cmd_kva;
 	bus_addr_t		cmd_paddr;
+
+	/* Certificate DMA Resources */
+	bus_dma_tag_t 	cert_dma_tag;
+	bus_dmamap_t	cert_dma_map;
+	void 			*certs_kva;
+	bus_addr_t 		certs_paddr;
 
 	/* TMR Resources, currently disabled */
 	/*
