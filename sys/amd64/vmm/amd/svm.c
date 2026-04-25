@@ -168,6 +168,7 @@ static int
 svm_modcleanup(void)
 {
 
+	svm_sev_hardware_free();
 	smp_rendezvous(NULL, svm_disable, NULL, NULL);
 
 	if (hsave != NULL)
