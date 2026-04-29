@@ -29,97 +29,98 @@ sevops_asp_wbinvd(void)
 }
 
 int
-sevops_platform_init(void)
+sevops_platform_init(uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->platform_shutdown == NULL)
 		return (ENODEV);
-	return g_sev_ops->platform_init();
+	return g_sev_ops->platform_init(asp_error);
 }
 
 int
-sevops_platform_shutdown(void)
+sevops_platform_shutdown(uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->platform_shutdown == NULL)
 		return (ENODEV);
-	return g_sev_ops->platform_shutdown();
+	return g_sev_ops->platform_shutdown(asp_error);
 }
 
 int
-sevops_platform_status(struct sev_platform_status *pstatus)
+sevops_platform_status(struct sev_platform_status *pstatus, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->platform_status == NULL)
 		return (ENODEV);
-	return g_sev_ops->platform_status(pstatus);
+	return g_sev_ops->platform_status(pstatus, asp_error);
 }
 
 int
-sevops_guest_launch_start(struct sev_launch_start *glaunch_start)
+sevops_guest_launch_start(struct sev_launch_start *glaunch_start, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_launch_start == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_launch_start(glaunch_start);
+	return g_sev_ops->guest_launch_start(glaunch_start, asp_error);
 }
 
 int
-sevops_guest_activate(struct sev_activate *gactivate)
+sevops_guest_activate(struct sev_activate *gactivate, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_activate == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_activate(gactivate);
+	return g_sev_ops->guest_activate(gactivate, asp_error);
 }
 
 int
-sevops_guest_status(struct sev_guest_status *gstatus)
+sevops_guest_status(struct sev_guest_status *gstatus, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_status == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_status(gstatus);
+	return g_sev_ops->guest_status(gstatus, asp_error);
 }
 
 int
-sevops_guest_launch_update_data(struct sev_launch_update_data *glaunch_update_data)
+sevops_guest_launch_update_data(struct sev_launch_update_data *glaunch_update_data, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_launch_update_data == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_launch_update_data(glaunch_update_data);
+	return g_sev_ops->guest_launch_update_data(glaunch_update_data, asp_error);
 }
 
+// LAUNCH_UPDATE_DATA is for SEV-ES, is still work in progress
 int
-sevops_guest_launch_update_vmsa(struct sev_launch_update_vmsa *glaunch_update_vmsa)
+sevops_guest_launch_update_vmsa(struct sev_launch_update_vmsa *glaunch_update_vmsa, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_launch_update_vmsa == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_launch_update_vmsa(glaunch_update_vmsa);
+	return g_sev_ops->guest_launch_update_vmsa(glaunch_update_vmsa, asp_error);
 }
 
 int
-sevops_guest_launch_finish(struct sev_launch_finish *glaunch_finish)
+sevops_guest_launch_finish(struct sev_launch_finish *glaunch_finish, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_launch_finish == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_launch_finish(glaunch_finish);
+	return g_sev_ops->guest_launch_finish(glaunch_finish, asp_error);
 }
 
 int
-sevops_guest_launch_measure(struct sev_launch_measure *glmeasure)
+sevops_guest_launch_measure(struct sev_launch_measure *glmeasure, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_launch_measure == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_launch_measure(glmeasure);
+	return g_sev_ops->guest_launch_measure(glmeasure, asp_error);
 }
 
 int
-sevops_guest_shutdown(struct sev_guest_shutdown_args *args)
+sevops_guest_shutdown(struct sev_guest_shutdown_args *args, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_shutdown == NULL)
 		return (ENODEV);
-	return g_sev_ops->guest_shutdown(args);
+	return g_sev_ops->guest_shutdown(args, asp_error);
 }
 
 int
-sevops_df_flush(void)
+sevops_df_flush(uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->df_flush == NULL)
 		return (ENODEV);
-	return g_sev_ops->df_flush();
+	return g_sev_ops->df_flush(asp_error);
 }

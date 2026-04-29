@@ -18,18 +18,19 @@ struct sev_activate;
 struct sev_guest_shutdown_args;
 
 DECLARE_SEVOPS_FUNC(int, asp_wbinvd, (void));
-DECLARE_SEVOPS_FUNC(int, platform_init, (void));
-DECLARE_SEVOPS_FUNC(int, platform_shutdown, (void));
-DECLARE_SEVOPS_FUNC(int, platform_status, (struct sev_platform_status *));
-DECLARE_SEVOPS_FUNC(int, guest_launch_start, (struct sev_launch_start *));
-DECLARE_SEVOPS_FUNC(int, guest_activate, (struct sev_activate *));
-DECLARE_SEVOPS_FUNC(int, guest_status, (struct sev_guest_status *));
-DECLARE_SEVOPS_FUNC(int, guest_launch_update_data, (struct sev_launch_update_data *));
-DECLARE_SEVOPS_FUNC(int, guest_launch_update_vmsa, (struct sev_launch_update_vmsa *));
-DECLARE_SEVOPS_FUNC(int, guest_launch_measure, (struct sev_launch_measure *));
-DECLARE_SEVOPS_FUNC(int, guest_launch_finish, (struct sev_launch_finish *));
-DECLARE_SEVOPS_FUNC(int, guest_shutdown, (struct sev_guest_shutdown_args *));
-DECLARE_SEVOPS_FUNC(int, df_flush, (void));
+DECLARE_SEVOPS_FUNC(int, platform_init, (uint32_t *));
+DECLARE_SEVOPS_FUNC(int, platform_shutdown, (uint32_t *));
+DECLARE_SEVOPS_FUNC(int, platform_status, (struct sev_platform_status *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_start, (struct sev_launch_start *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_activate, (struct sev_activate *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_status, (struct sev_guest_status *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_update_data, (struct sev_launch_update_data *, uint32_t *));
+// LAUNCH_UPDATE_DATA is for SEV-ES, is still work in progress
+DECLARE_SEVOPS_FUNC(int, guest_launch_update_vmsa, (struct sev_launch_update_vmsa *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_measure, (struct sev_launch_measure *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_finish, (struct sev_launch_finish *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_shutdown, (struct sev_guest_shutdown_args *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, df_flush, (uint32_t *));
 
 int hook_sev_ops(struct sev_ops *ops);
 void unhook_sev_ops(void);

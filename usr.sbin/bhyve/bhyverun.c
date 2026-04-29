@@ -887,13 +887,15 @@ main(int argc, char *argv[])
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_INIT;
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.error) < 0)
 			errx(EX_OSERR, "Failed to INIT SEV");
 		*/
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_START;
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+		sevcmd.data = NULL;
+		sevcmd.error = 0;
+		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to LAUNCH_START SEV");
 	}
 

@@ -2346,9 +2346,10 @@ static void
 svm_cleanup(void *vmi)
 {
 	struct svm_softc *sc = vmi;
+	uint32_t asp_error = 0;
 
 	svm_sev_free_asid(sc->sev_asid);
-	svm_sev_guest_shutdown(sc);
+	svm_sev_guest_shutdown(sc, &asp_error);
 	free(sc->iopm_bitmap, M_SVM);
 	free(sc->msr_bitmap, M_SVM);
 	free(sc, M_SVM);
@@ -2897,11 +2898,10 @@ static int
 svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 {
 	struct svm_softc *sc = vmi;
-	int error;
+	int error = 0;
+	int asp_error = 0;
 	struct sev_launch_update_data_vm udata_vm;
 	struct sev_launch_measure lmeasure;
-
-	error = 0;
 
 	switch(sevcmd->cmd) {
 	case VM_SEV_CMD_INIT:
@@ -2909,39 +2909,40 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_LAUNCH_START:
-		error = svm_sev_launch_start(sc);
+		error = svm_sev_launch_start(sc, &asp_error);
 		break;
 
 	case VM_SEV_CMD_LAUNCH_UPDATE_DATA:
 		error = copyin(sevcmd->data, &udata_vm, sizeof(udata_vm));
-		if (error)
-			break;
-
-		error = svm_sev_launch_update_data(sc, &udata_vm);
+		if (error == 0)
+			error = svm_sev_launch_update_data(sc, &udata_vm, &asp_error);
 		break;
 
 	case VM_SEV_CMD_LAUNCH_MEASURE:
-		error = svm_sev_launch_measure(sc, &lmeasure);
+		error = svm_sev_launch_measure(sc, &lmeasure, &asp_error);
 		if (error == 0) {
 			for (uint32_t i = 0; i < lmeasure.measure_len; i++) {
 				printf("%02x", lmeasure.measure[i]);
 			}
 			printf("\n");
-			error = copyout(&lmeasure, sevcmd->data, sizeof(lmeasure));
 		}
+		if (error == 0 && asp_error == 0)
+			error = copyout(&lmeasure, sevcmd->data, sizeof(lmeasure));
 		break;
 
 	case VM_SEV_CMD_LAUNCH_FINISH:
-		error = svm_sev_launch_finish(sc);
+		error = svm_sev_launch_finish(sc, &asp_error);
 		break;
 
 	case VM_SEV_CMD_SHUTDOWN:
-		error = svm_sev_guest_shutdown(sc);
+		error = svm_sev_guest_shutdown(sc, &asp_error);
 		break;
 
 	default:
 		error = EINVAL;
 	}
+
+	sevcmd->error = asp_error;
 
 	return (error);
 }

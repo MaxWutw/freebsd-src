@@ -256,7 +256,7 @@ _Static_assert(sizeof(struct vm_readwrite_kernemu_device) == 24, "ABI");
 struct vm_sev_cmd {
 	uint32_t cmd;
 	void 	 *data;
-	size_t	 len;
+	uint32_t error;
 };
 
 enum {

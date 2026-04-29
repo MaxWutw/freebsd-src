@@ -377,8 +377,8 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_MEASURE;
 		sevcmd.data = &measure;
-		sevcmd.len = sizeof(measure);
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+		sevcmd.error = 0;
+		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to MEASURE SEV guest");
 		printf("[+] MEASURE success! Measurement Hash:\n    ");
 		for (uint32_t i = 0; i < measure.measure_len; i++) {
@@ -388,7 +388,9 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_FINISH;
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.len) < 0)
+		sevcmd.data = NULL;
+		sevcmd.error = 0;
+		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to FINISH SEV guest");
 
 		printf("SEV launch complete. VM is ready!\n");

@@ -134,11 +134,11 @@ svm_sev_free_asid(uint32_t asid)
 }
 
 static int
-svm_sev_activate(struct svm_softc *sc)
+svm_sev_activate(struct svm_softc *sc, uint32_t *asp_error)
 {
 	struct sev_activate g_activate;
 
-	if (sevops_df_flush()) {
+	if (sevops_df_flush(asp_error)) {
 		printf("%s: failed to df flush\n", __func__);
 		return (EINVAL);
 	}
@@ -146,7 +146,7 @@ svm_sev_activate(struct svm_softc *sc)
 	bzero(&g_activate, sizeof(g_activate));
 	g_activate.handle = sc->handle;
 	g_activate.asid = sc->sev_asid;
-	if (sevops_guest_activate(&g_activate)) {
+	if (sevops_guest_activate(&g_activate, asp_error)) {
 		printf("%s: failed to activate sev asid\n", __func__);
 		return (EINVAL);
 	}
@@ -155,7 +155,7 @@ svm_sev_activate(struct svm_softc *sc)
 }
 
 int
-svm_sev_launch_start(struct svm_softc *sc)
+svm_sev_launch_start(struct svm_softc *sc, uint32_t *asp_error)
 {
 	struct sev_platform_status	p_status;
 	struct sev_launch_start		g_ls;
@@ -183,7 +183,7 @@ svm_sev_launch_start(struct svm_softc *sc)
 	bzero(&g_ls, sizeof(g_ls));
 	/* Currently disable SEV-ES */
 	g_ls.policy = (NODBG | NOKS | NOSEND | DOMAIN | SEV);
-	if (sevops_guest_launch_start(&g_ls) != 0) {
+	if (sevops_guest_launch_start(&g_ls, asp_error) != 0) {
 		printf("%s: failed to launch start\n", __func__);
 		svm_sev_free_asid(sc->sev_asid);
 		return (EINVAL);
@@ -192,19 +192,19 @@ svm_sev_launch_start(struct svm_softc *sc)
 
 	bzero(&g_status, sizeof(g_status));
 	g_status.handle = g_ls.handle;
-	if (sevops_guest_status(&g_status) != 0) {
+	if (sevops_guest_status(&g_status, asp_error) != 0) {
 		printf("%s: failed to get sev guest status\n", __func__);
 		return (EINVAL);
 	}
 
-	if (svm_sev_activate(sc) != 0) {
+	if (svm_sev_activate(sc, asp_error) != 0) {
 		printf("%s: failed to bind SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
 		return (EINVAL);
 	}
 	printf("%s: Successfully bouond SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
 
 	bzero(&p_status, sizeof(p_status));
-	if (sevops_platform_status(&p_status) != 0) {
+	if (sevops_platform_status(&p_status, asp_error) != 0) {
 		printf("%s: failed to get sev platform status\n", __func__);
 		return (EINVAL);
 	}
@@ -216,7 +216,7 @@ svm_sev_launch_start(struct svm_softc *sc)
 }
 
 int
-svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata)
+svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata, uint32_t *asp_error)
 {
 	vm_paddr_t gpa;
 	size_t size, offset, len;
@@ -226,7 +226,6 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 
 	gpa = udata->vaddr;
 	size = udata->length;
-	// gpa_end = gpa + size;
 
 	bzero(&g_ludata, sizeof(g_ludata));
 	g_ludata.handle = sc->handle;
@@ -260,7 +259,7 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		*/
 		/* for debug */
 
-		error = sevops_guest_launch_update_data(&g_ludata);
+		error = sevops_guest_launch_update_data(&g_ludata, asp_error);
 		if (error) {
 			printf("%s: ASP hw failed at GPA 0x%lx\n", __func__, gpa + offset);
 			vm_gpa_release(cookie);
@@ -288,7 +287,7 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 }
 
 int
-svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure)
+svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure, uint32_t *asp_error)
 {
 	int error;
 
@@ -296,7 +295,7 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 	lmeasure->handle = sc->handle;
 	lmeasure->measure_len = sizeof(lmeasure->measure) + sizeof(lmeasure->measure_nonce);
 
-	error = sevops_guest_launch_measure(lmeasure);
+	error = sevops_guest_launch_measure(lmeasure, asp_error);
 	if (error) {
 		printf("%s: failed to get measurement from hardware\n", __func__);
 	}
@@ -305,13 +304,13 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 }
 
 int
-svm_sev_launch_finish(struct svm_softc *sc)
+svm_sev_launch_finish(struct svm_softc *sc, uint32_t *asp_error)
 {
 	struct sev_launch_finish g_lf;
 
 	bzero(&g_lf, sizeof(g_lf));
 	g_lf.handle = sc->handle;
-	if (sevops_guest_launch_finish(&g_lf)) {
+	if (sevops_guest_launch_finish(&g_lf, asp_error)) {
 		printf("%s: failed to launch finish\n", __func__);
 		return (EINVAL);
 	}
@@ -320,13 +319,13 @@ svm_sev_launch_finish(struct svm_softc *sc)
 }
 
 int
-svm_sev_guest_shutdown(struct svm_softc *sc)
+svm_sev_guest_shutdown(struct svm_softc *sc, uint32_t *asp_error)
 {
 	struct sev_guest_shutdown_args g_shutdown;
 	
 	bzero(&g_shutdown, sizeof(g_shutdown));
 	g_shutdown.handle = sc->handle;
-	if (sevops_guest_shutdown(&g_shutdown)) {
+	if (sevops_guest_shutdown(&g_shutdown, asp_error)) {
 		printf("%s: failed to shutdown guest sev\n", __func__);
 		return (EINVAL);
 	}
