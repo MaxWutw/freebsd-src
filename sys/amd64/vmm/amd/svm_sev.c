@@ -216,6 +216,67 @@ svm_sev_launch_start(struct svm_softc *sc, uint32_t *asp_error)
 }
 
 int
+svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_start *uls, uint32_t *asp_error)
+{
+	struct sev_platform_status	p_status;
+	struct sev_launch_start		g_ls;
+	struct sev_guest_status		g_status;
+	int allocated_asid;
+	u_int regs[4];
+	
+	sc->sev_enable = true;
+	allocated_asid = svm_sev_alloc_asid();
+	if (allocated_asid <= 0) {
+		printf("%s: failed to allocate SEV ASID\n", __func__);
+		return (ENOMEM);
+	}
+
+	/* CPUID Fn8000_001F is for AMD SEV feature */
+	do_cpuid(0x8000001f, regs);
+	if ((regs[0] & 0x02) == 0) {
+		printf("SVM: SEV feature is not enabled\n");
+		return (EINVAL);
+	}
+
+	sc->sev_asid = allocated_asid;
+	sc->sev_c_bit = regs[1] & 0x3f; // EBX[5:0]
+
+	bzero(&g_ls, sizeof(g_ls));
+	/* Currently disable SEV-ES */
+	g_ls.policy = (NODBG | NOKS | NOSEND | DOMAIN | SEV);
+	if (sevops_guest_launch_start(&g_ls, asp_error) != 0) {
+		printf("%s: failed to launch start\n", __func__);
+		svm_sev_free_asid(sc->sev_asid);
+		return (EINVAL);
+	}
+	sc->handle = g_ls.handle;
+
+	bzero(&g_status, sizeof(g_status));
+	g_status.handle = g_ls.handle;
+	if (sevops_guest_status(&g_status, asp_error) != 0) {
+		printf("%s: failed to get sev guest status\n", __func__);
+		return (EINVAL);
+	}
+
+	if (svm_sev_activate(sc, asp_error) != 0) {
+		printf("%s: failed to bind SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
+		return (EINVAL);
+	}
+	printf("%s: Successfully bouond SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
+
+	bzero(&p_status, sizeof(p_status));
+	if (sevops_platform_status(&p_status, asp_error) != 0) {
+		printf("%s: failed to get sev platform status\n", __func__);
+		return (EINVAL);
+	}
+	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
+	printf("SVM: State: %d\n", p_status.state);
+	printf("SVM: Guests: %d\n", p_status.guest_count);
+
+	return (0);
+}
+
+int
 svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_vm *udata, uint32_t *asp_error)
 {
 	vm_paddr_t gpa;

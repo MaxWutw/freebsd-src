@@ -42,6 +42,15 @@ struct sev_init {
 	uint32_t tmr_length;	/* In */
 } __packed;
 
+struct sev_user_platform_status {
+	uint8_t 	api_major;		/* Out */
+	uint8_t 	api_minor;		/* Out */
+	uint8_t 	state;			/* Out */
+	uint8_t 	owner;			/* Out */
+	uint32_t 	cfges_build;	/* Out */
+	uint32_t 	guest_count;	/* Out */
+};
+
 struct sev_platform_status {
 	uint8_t 	api_major;		/* Out */
 	uint8_t 	api_minor;		/* Out */
@@ -68,6 +77,16 @@ struct sev_pdh_cert_export {
 	uint32_t	certs_len;		/* In/Out */
 } __packed;
 
+struct sev_user_get_id {
+	uint64_t	id_vaddr;		/* In */
+	uint32_t 	id_len;			/* In/Out */
+};
+
+struct sev_get_id {
+	uint64_t	id_paddr;		/* In */
+	uint32_t 	id_len;			/* In/Out */
+} __packed;
+
 struct sev_activate {
 	uint32_t handle;	/* In */
 	uint32_t asid;		/* In */
@@ -86,6 +105,16 @@ struct sev_guest_status {
 	uint32_t policy;	/* Out */
 	uint32_t asid;		/* Out */
 	uint8_t  state;		/* Out */
+} __packed;
+
+struct sev_user_launch_start {
+	uint32_t handle;		/* In/Out */
+	uint32_t policy;		/* In */
+	uint64_t dh_cert_paddr; /* In */
+	uint32_t dh_cert_len;	/* In */
+	uint32_t reserved;		/* - */
+	uint64_t session_paddr; /* In */
+	uint32_t session_len;	/* In */
 } __packed;
 
 struct sev_launch_start {

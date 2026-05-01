@@ -22,6 +22,7 @@
 #define SEV_CMD_PDH_GEN				0x09
 #define SEV_CMD_DF_FLUSH			0x0a
 #define SEV_CMD_DOWNLOAD_FIRMWARE	0x0b
+#define SEV_CMD_GET_ID				0x0c
 
 /* Guest commands */
 #define SEV_CMD_DECOMMISSION 		0x20
@@ -57,6 +58,8 @@
 
 /* ASP ioctl definition */
 #define ASP_IOC_PDH_CERT_EXPORT _IOWR('s', 1, struct sev_user_pdh_cert_export)
+#define ASP_IOC_PLATFORM_STATUS _IOWR('s', 2, struct sev_user_platform_status)
+#define ASP_IOC_GET_ID			_IOWR('s', 3, struct sev_user_get_id)
 
 struct asp_softc {
 	device_t dev;

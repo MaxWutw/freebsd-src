@@ -2900,6 +2900,7 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 	struct svm_softc *sc = vmi;
 	int error = 0;
 	int asp_error = 0;
+	struct sev_user_launch_start uls;
 	struct sev_launch_update_data_vm udata_vm;
 	struct sev_launch_measure lmeasure;
 
@@ -2909,7 +2910,17 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_LAUNCH_START:
-		error = svm_sev_launch_start(sc, &asp_error);
+		/* Without provide GODH and session binary file */
+		if (sevcmd->data) {
+			error = svm_sev_launch_start(sc, &asp_error);
+		} else {
+			error = copyin(sevcmd->data, &uls, sizeof(uls));
+			if (error == 0) {
+				error = svm_sev_launch_start_with_session(sc, &uls, &asp_error);
+				if (error == 0)
+					error = copyout(&uls, sevcmd->data, sizeof(uls));
+			}
+		}
 		break;
 
 	case VM_SEV_CMD_LAUNCH_UPDATE_DATA:

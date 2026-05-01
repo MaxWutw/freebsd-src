@@ -295,31 +295,6 @@ asp_attach(device_t dev)
 		goto fail;
 	}
 
-	/* Test for get SEV platform status */
-	/*
-	struct sev_platform_status pstatus;
-	error = asp_hw_platform_status(sc, &pstatus);
-	if (error != 0) {
-		device_printf(dev, "Failed to get SEV platform status\n");
-		goto fail;
-	}
-	device_printf(sc->dev, "SEV status:\n");
-	device_printf(sc->dev, "	API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
-	device_printf(sc->dev, "	State: %d\n", pstatus.state);
-	device_printf(sc->dev, "	Guests: %d\n", pstatus.guest_count);
-
-	asp_hw_platform_shutdown(sc);
-	error = asp_hw_platform_status(sc, &pstatus);
-	if (error != 0) {
-		device_printf(dev, "Failed to get SEV platform status\n");
-		goto fail;
-	}
-	device_printf(sc->dev, "SEV status:\n");
-	device_printf(sc->dev, "	API version: %d.%d\n", pstatus.api_major, pstatus.api_minor);
-	device_printf(sc->dev, "	State: %d\n", pstatus.state);
-	device_printf(sc->dev, "	Guests: %d\n", pstatus.guest_count);
-	*/
-
 	return (0);
 fail:
 	asp_detach(dev);
@@ -557,6 +532,31 @@ asp_hw_platform_pdh_cert_export(struct asp_softc *sc, struct sev_pdh_cert_export
 
 	ppdh_cert_export->pdh_cert_len 	= pdh_cert_export->pdh_cert_len;
 	ppdh_cert_export->certs_len 	= pdh_cert_export->certs_len;
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
+asp_hw_platform_get_id(struct asp_softc *sc, struct sev_get_id *pget_id, uint32_t *asp_ret)
+{
+	struct sev_get_id *get_id;
+	int error;
+	
+	mtx_lock(&sc->mtx_lock);
+
+	get_id = (struct sev_get_id*)sc->cmd_kva;
+	if (get_id == NULL) {
+		mtx_unlock(&sc->mtx_lock);
+		return (ENOMEM);
+	}
+	get_id->id_paddr = sc->certs_paddr;
+	get_id->id_len = pget_id->id_len;
+
+	error = asp_send_cmd(sc, SEV_CMD_GET_ID, sc->cmd_paddr, asp_ret);
+	if (error)
+		pget_id->id_len = get_id->id_len;
 
 	mtx_unlock(&sc->mtx_lock);
 
@@ -913,12 +913,30 @@ static int
 asp_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag, struct thread *td)
 {
 	struct asp_softc *sc = dev->si_drv1;
+	struct sev_user_platform_status *platform_status_user;
+	struct sev_platform_status pstatus;
 	struct sev_user_pdh_cert_export *pdh_cert_export_user;
 	struct sev_pdh_cert_export ppdh_cert_export;
+	struct sev_user_get_id *get_id_user;
+	struct sev_get_id get_id;
 	int error = 0;
 	uint32_t asp_error = 0;
 
 	switch (cmd) {
+	case ASP_IOC_PLATFORM_STATUS:
+		platform_status_user = (struct sev_user_platform_status*)data;
+		bzero(&pstatus, sizeof(struct sev_platform_status));
+		error = asp_hw_platform_status(sc, &pstatus, &asp_error);
+		if (error == 0) {
+			platform_status_user->api_major   = pstatus.api_major;
+			platform_status_user->api_minor   = pstatus.api_minor;
+			platform_status_user->state       = pstatus.state;
+			platform_status_user->owner       = pstatus.owner;
+			platform_status_user->cfges_build = pstatus.cfges_build;
+			platform_status_user->guest_count = pstatus.guest_count;
+		}
+
+		break;
 	case ASP_IOC_PDH_CERT_EXPORT:
 		pdh_cert_export_user = (struct sev_user_pdh_cert_export*)data;
 
@@ -961,7 +979,18 @@ asp_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag, struct thread *
 				device_printf(sc->dev, "ASP PDH certificate copyout failed.\n");
 				return (error);
 			}
-		} break;
+		} 
+		break;
+	case ASP_IOC_GET_ID:
+		get_id_user = (struct sev_user_get_id*)data;
+		bzero(&get_id, sizeof(struct sev_get_id));
+		get_id.id_len = get_id_user->id_len;
+		error = asp_hw_platform_get_id(sc, &get_id, &asp_error);
+		if (error == 0 && get_id.id_len > 0) {
+			error = copyout(sc->certs_kva, (void*)get_id_user->id_vaddr, get_id_user->id_len);
+			get_id_user->id_len = get_id.id_len;
+		}
+		break;
 
 	default:
 		break;
