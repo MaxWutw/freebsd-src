@@ -110,10 +110,10 @@ struct sev_guest_status {
 struct sev_user_launch_start {
 	uint32_t handle;		/* In/Out */
 	uint32_t policy;		/* In */
-	uint64_t dh_cert_paddr; /* In */
+	uint64_t dh_cert_vaddr; /* In */
 	uint32_t dh_cert_len;	/* In */
 	uint32_t reserved;		/* - */
-	uint64_t session_paddr; /* In */
+	uint64_t session_vaddr; /* In */
 	uint32_t session_len;	/* In */
 } __packed;
 

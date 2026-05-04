@@ -2911,7 +2911,7 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 
 	case VM_SEV_CMD_LAUNCH_START:
 		/* Without provide GODH and session binary file */
-		if (sevcmd->data) {
+		if (sevcmd->data == NULL) {
 			error = svm_sev_launch_start(sc, &asp_error);
 		} else {
 			error = copyin(sevcmd->data, &uls, sizeof(uls));

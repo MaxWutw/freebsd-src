@@ -33,9 +33,9 @@
 #include <sys/cpuset.h>
 #include <sys/domainset.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #ifdef BHYVE_SNAPSHOT
 #include <sys/socket.h>
-#include <sys/stat.h>
 #endif
 #include <sys/time.h>
 #ifdef BHYVE_SNAPSHOT
@@ -45,6 +45,8 @@
 
 #include <machine/atomic.h>
 #include <machine/vmm_dev.h>
+
+#include <x86/sev.h>
 
 #ifndef WITHOUT_CAPSICUM
 #include <capsicum_helpers.h>
@@ -724,6 +726,40 @@ do_open(const char *vmname)
 	return (ctx);
 }
 
+static int
+sev_read_file(const char *path, void **buf_out, size_t *size_out)
+{
+	int fd;
+	struct stat st;
+	void *buf;
+	ssize_t n;
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return (-1);
+	if (fstat(fd, &st) < 0) {
+		close(fd);
+		return (-1);
+	}
+	
+	buf = malloc(st.st_size);
+	if (buf == NULL) {
+		close(fd);
+		return (-1);
+	}
+
+	n = read(fd, buf, st.st_size);
+	close(fd);
+	if (n != st.st_size) {
+		free(buf);
+		return (-1);
+	}
+	*buf_out = buf;
+	*size_out = st.st_size;
+
+	return (0);
+}
+
 bool
 bhyve_parse_config_option(const char *option)
 {
@@ -880,23 +916,53 @@ main(int argc, char *argv[])
 	}
 
 	/* If AMD SEV enabled, we initialize and launch start for SEV */
-	if (get_config_bool_default("amd.sev", false)) {
+	if (get_config_bool_default("amd.sev.enable", false)) {
 		struct vm_sev_cmd sevcmd;
-		/*
-		printf("bhyve: Initializing AMD SEV...\n");
+		struct sev_user_launch_start uls;
+		void *godh_buf = NULL, *session_buf = NULL;
+		size_t godh_size = 0, session_size = 0;
+		const char *godh_path, *session_path;
+		bool use_attestation = false;
 
-		bzero(&sevcmd, sizeof(sevcmd));
-		sevcmd.cmd = VM_SEV_CMD_INIT;
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.error) < 0)
-			errx(EX_OSERR, "Failed to INIT SEV");
-		*/
+		bzero(&uls, sizeof(uls));
+		uls.handle = 0;
+		/* NODBG | NOKS | NOSEND | DOMAIN | SEV */
+		uls.policy = (1ULL << 0) | (1ULL << 1) | (1ULL << 3) |
+					 (1ULL << 4) | (1ULL << 5);
+
+		godh_path = get_config_value("amd.sev.godh");
+		session_path = get_config_value("amd.sev.session");
+
+		if (godh_path != NULL && session_path != NULL) {
+			if (sev_read_file(godh_path, &godh_buf, &godh_size) != 0)
+				errx(EX_USAGE, "failed to read GODH: %s", godh_path);
+			if (sev_read_file(session_path, &session_buf, &session_size) != 0)
+				errx(EX_USAGE, "failed to read session: %s", godh_path);
+			uls.dh_cert_vaddr	= (uint64_t)godh_buf;
+			uls.dh_cert_len		= godh_size;
+			uls.session_vaddr	= (uint64_t)session_buf;
+			uls.session_len		= session_size;
+			use_attestation = true;
+			printf("SEV with Legacy Attestation: GODH=%zu bytes, session=%zu bytes\n",
+					godh_size, session_size);
+		} else if (godh_path != NULL || session_path != NULL) {
+			errx(EX_USAGE, "amd.sev.godh and amd.sev.session must both be set");
+		} else {
+			printf("SEV without attestation (no GODH/session)\n");
+		}
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_START;
-		sevcmd.data = NULL;
+		sevcmd.data = use_attestation ? (void *)&uls : NULL;
 		sevcmd.error = 0;
 		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to LAUNCH_START SEV");
+
+		if (use_attestation) {
+			printf("SEV guest handle: %u\n", uls.handle);
+			free(godh_buf);
+			free(session_buf);
+		}
 	}
 
 	set_vcpu_affinities();

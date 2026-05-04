@@ -370,7 +370,7 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 	if (error != 0)
 		return (error);
 
-	if (get_config_bool_default("amd.sev", false)) {
+	if (get_config_bool_default("amd.sev.enable", false)) {
 		bzero(&measure, sizeof(measure));
 		measure.measure_len = sizeof(measure.measure);
 

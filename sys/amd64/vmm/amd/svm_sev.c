@@ -2,6 +2,7 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
+#include <sys/kernel.h>
 #include <sys/bitstring.h>
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -32,6 +33,8 @@ static bitstr_t *sev_asid_bitmap;
 static uint32_t sev_asid_min;
 static uint32_t sev_asid_max;
 static uint8_t sev_hardware_supported = false;
+
+static MALLOC_DEFINE(M_SVM_SEV, "svm_sev", "svm_sev");
 
 int
 svm_sev_hardware_init(void)
@@ -170,13 +173,14 @@ svm_sev_launch_start(struct svm_softc *sc, uint32_t *asp_error)
 		return (ENOMEM);
 	}
 
-	/* CPUID Fn8000_001F is for AMD SEV feature */
+	/* Read CPUID Fn8000_001F is for AMD SEV feature */
 	do_cpuid(0x8000001f, regs);
 	if ((regs[0] & 0x02) == 0) {
 		printf("SVM: SEV feature is not enabled\n");
+		sc->sev_asid = 0;
+		sc->sev_enable = false;
 		return (EINVAL);
 	}
-
 	sc->sev_asid = allocated_asid;
 	sc->sev_c_bit = regs[1] & 0x3f; // EBX[5:0]
 
@@ -221,6 +225,8 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 	struct sev_platform_status	p_status;
 	struct sev_launch_start		g_ls;
 	struct sev_guest_status		g_status;
+	void *godh_kbuf = NULL, *session_kbuf = NULL;
+	int error;
 	int allocated_asid;
 	u_int regs[4];
 	
@@ -231,36 +237,74 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 		return (ENOMEM);
 	}
 
-	/* CPUID Fn8000_001F is for AMD SEV feature */
+	/* Read CPUID Fn8000_001F is for AMD SEV feature */
 	do_cpuid(0x8000001f, regs);
 	if ((regs[0] & 0x02) == 0) {
 		printf("SVM: SEV feature is not enabled\n");
-		return (EINVAL);
+		error = EINVAL;
+		goto fail_asid;
 	}
-
 	sc->sev_asid = allocated_asid;
 	sc->sev_c_bit = regs[1] & 0x3f; // EBX[5:0]
 
+	/* copyin GODH cert and session blob to kernel buffers */
+	if (uls->dh_cert_len > 0) {
+		if (uls->dh_cert_len > 4096) {
+			error = EINVAL;
+			goto fail_asid;
+		}
+		godh_kbuf = malloc(uls->dh_cert_len, M_SVM_SEV, M_WAITOK | M_ZERO);
+		error = copyin((const void *)uls->dh_cert_vaddr, godh_kbuf, uls->dh_cert_len);
+		if (error != 0) {
+			printf("%s: copyin GODH failed\n", __func__);
+			goto fail_buf;
+		}
+	}
+	if (uls->session_len > 0) {
+		if (uls->session_len > 4096) {
+			error = EINVAL;
+			goto fail_buf;
+		}
+		session_kbuf = malloc(uls->session_len, M_SVM_SEV, M_WAITOK | M_ZERO);
+		error = copyin((const void *)uls->session_vaddr, session_kbuf, uls->session_len);
+		if (error != 0) {
+			printf("%s: copyin session failed\n", __func__);
+			goto fail_buf;
+		}
+	}
+
 	bzero(&g_ls, sizeof(g_ls));
-	/* Currently disable SEV-ES */
-	g_ls.policy = (NODBG | NOKS | NOSEND | DOMAIN | SEV);
+	g_ls.handle = uls->handle;
+	g_ls.policy = uls->policy;
+	if (godh_kbuf != NULL) {
+		g_ls.dh_cert_paddr = vtophys(godh_kbuf);
+		g_ls.dh_cert_len   = uls->dh_cert_len;
+	}
+	if (session_kbuf != NULL) {
+		g_ls.session_paddr = vtophys(session_kbuf);
+		g_ls.session_len   = uls->session_len;
+	}
+
 	if (sevops_guest_launch_start(&g_ls, asp_error) != 0) {
 		printf("%s: failed to launch start\n", __func__);
-		svm_sev_free_asid(sc->sev_asid);
-		return (EINVAL);
+		error = EINVAL;
+		goto fail_buf;
 	}
 	sc->handle = g_ls.handle;
+	uls->handle = g_ls.handle;
 
 	bzero(&g_status, sizeof(g_status));
-	g_status.handle = g_ls.handle;
+	g_status.handle = sc->handle;
 	if (sevops_guest_status(&g_status, asp_error) != 0) {
 		printf("%s: failed to get sev guest status\n", __func__);
-		return (EINVAL);
+		error = EINVAL;
+		goto fail_buf;
 	}
 
 	if (svm_sev_activate(sc, asp_error) != 0) {
 		printf("%s: failed to bind SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
-		return (EINVAL);
+		error = EINVAL;
+		goto fail_buf;
 	}
 	printf("%s: Successfully bouond SEV ASID: %d with handle: %d\n", __func__, sc->sev_asid, sc->handle);
 
@@ -273,7 +317,21 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 	printf("SVM: State: %d\n", p_status.state);
 	printf("SVM: Guests: %d\n", p_status.guest_count);
 
+	free(godh_kbuf, M_SVM_SEV);
+	free(session_kbuf, M_SVM_SEV);
 	return (0);
+
+fail_buf:
+	if (godh_kbuf != NULL)
+		free(godh_kbuf, M_SVM_SEV);
+	if (session_kbuf != NULL)
+		free(session_kbuf, M_SVM_SEV);
+
+fail_asid:
+	svm_sev_free_asid(sc->sev_asid);
+	sc->sev_asid = 0;
+	sc->sev_enable = false;
+	return (error);
 }
 
 int

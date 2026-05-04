@@ -279,7 +279,7 @@ bootrom_loadrom(struct vmctx *ctx)
 	}
 
 	prot = PROT_READ | PROT_EXEC;
-	if (get_config_bool_default("amd.sev", false)) {
+	if (get_config_bool_default("amd.sev.enable", false)) {
 		prot |= PROT_WRITE;
 	}
 	/* Map the bootrom into the guest address space */
@@ -298,7 +298,7 @@ bootrom_loadrom(struct vmctx *ctx)
 		}
 	}
 
-	if (get_config_bool_default("amd.sev", false)) {
+	if (get_config_bool_default("amd.sev.enable", false)) {
 		udata.vaddr = rom_gpa;
 		udata.length = rom_size;
 
