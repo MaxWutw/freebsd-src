@@ -417,6 +417,9 @@ asp_send_cmd(struct asp_softc *sc, uint32_t cmd, uint64_t paddr, uint32_t *asp_r
 	if (!cold)
 		cmd_id |= ASP_CMDRESP_IOC;
 
+	/* Flush CPU cache to RAM so PSP sees our writes */
+    // bus_dmamap_sync(sc->cmd_dma_tag, sc->cmd_dma_map, BUS_DMASYNC_PREWRITE);
+
 	bus_write_4(sc->pci_resource, sc->reg_addr_lo, paddr_lo);
 	bus_write_4(sc->pci_resource, sc->reg_addr_hi, paddr_hi);
 	bus_write_4(sc->pci_resource, sc->reg_cmdresp, cmd_id);
@@ -425,6 +428,9 @@ asp_send_cmd(struct asp_softc *sc, uint32_t cmd, uint64_t paddr, uint32_t *asp_r
 
 	if (error)
 		return (error);
+
+	/* Invalidate cache to see PSP's writes */
+    // bus_dmamap_sync(sc->cmd_dma_tag, sc->cmd_dma_map, BUS_DMASYNC_POSTREAD);
 
 	*asp_ret = status;
 	if (status & ASP_CMDRESP_RESPONSE) {
@@ -576,6 +582,12 @@ asp_hw_guest_launch_start(struct asp_softc *sc, struct sev_launch_start *glaunch
 
 	launch_start->handle = glaunch_start->handle;
 	launch_start->policy = glaunch_start->policy;
+	launch_start->dh_cert_paddr = glaunch_start->dh_cert_paddr;
+    launch_start->dh_cert_len   = glaunch_start->dh_cert_len;
+    launch_start->session_paddr = glaunch_start->session_paddr;
+    launch_start->session_len   = glaunch_start->session_len;
+
+	// asp_wbinvd();
 
 	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_START, sc->cmd_paddr, asp_ret);
 
@@ -635,7 +647,7 @@ asp_hw_guest_launch_update_data(struct asp_softc *sc, struct sev_launch_update_d
 	return (error);
 }
 
-// LAUNCH_UPDATE_DATA is for SEV-ES, is still work in progress
+// LAUNCH_UPDATE_VMSA is for SEV-ES, is still work in progress
 static int
 asp_hw_guest_launch_update_vmsa(struct asp_softc *sc, struct sev_launch_update_vmsa *gluvmsa, uint32_t *asp_ret)
 {

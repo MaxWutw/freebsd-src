@@ -2932,9 +2932,18 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 	case VM_SEV_CMD_LAUNCH_MEASURE:
 		error = svm_sev_launch_measure(sc, &lmeasure, &asp_error);
 		if (error == 0) {
+			printf("the measure len: %d\n", lmeasure.measure_len);
 			for (uint32_t i = 0; i < lmeasure.measure_len; i++) {
 				printf("%02x", lmeasure.measure[i]);
 			}
+			printf("\n");
+			printf("SEV measure: ");
+			for (uint32_t i = 0; i < 32; i++)
+				printf("%02x", lmeasure.measure[i]);
+			printf("\n");
+			printf("SEV nonce:   ");
+			for (uint32_t i = 0; i < 16; i++)
+				printf("%02x", lmeasure.measure_nonce[i]);
 			printf("\n");
 		}
 		if (error == 0 && asp_error == 0)

@@ -308,26 +308,10 @@ bootrom_loadrom(struct vmctx *ctx)
 		sevcmd.data = &udata;
 		sevcmd.error = 0;
 
-		printf("[BHYVE SEV] Encrypting ROM from GPA 0x%lx to 0x%lx (Size: %u)\n",
-		   udata.vaddr, udata.vaddr + udata.length, udata.length);
 		if (vm_sev_command(ctx, &sevcmd) < 0) {
 			EPRINTLN("Failed to launch update data for BootROM");
 			goto done;
 		}
-
-		/*
-		udata.vaddr = 0x0;
-		udata.length = 1024;
-		sevcmd.cmd = VM_SEV_CMD_LAUNCH_UPDATE_DATA;
-		sevcmd.data = &udata;
-		sevcmd.error = 0;
-		if (vm_sev_command(ctx, sevcmd.cmd, sevcmd.data, sevcmd.error) < 0) {
-			EPRINTLN("Failed to launch update data for BootROM");
-			goto done;
-		}
-		*/
-		
-		printf("sev launch update data for BootROM successfully\n");
 	}
 
 	if (varfd >= 0) {

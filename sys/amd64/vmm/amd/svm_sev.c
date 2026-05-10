@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/types.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/kernel.h>
@@ -253,7 +254,12 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 			error = EINVAL;
 			goto fail_asid;
 		}
-		godh_kbuf = malloc(uls->dh_cert_len, M_SVM_SEV, M_WAITOK | M_ZERO);
+		godh_kbuf = contigmalloc(uls->dh_cert_len, M_SVM_SEV, M_WAITOK | M_ZERO,
+				0, 0xffffffff, PAGE_SIZE, 0);
+		if (godh_kbuf == NULL) {
+			error = ENOMEM;
+			goto fail_asid;
+		}
 		error = copyin((const void *)uls->dh_cert_vaddr, godh_kbuf, uls->dh_cert_len);
 		if (error != 0) {
 			printf("%s: copyin GODH failed\n", __func__);
@@ -265,7 +271,12 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 			error = EINVAL;
 			goto fail_buf;
 		}
-		session_kbuf = malloc(uls->session_len, M_SVM_SEV, M_WAITOK | M_ZERO);
+		session_kbuf = contigmalloc(uls->session_len, M_SVM_SEV, M_WAITOK | M_ZERO,
+				0, 0xffffffff, PAGE_SIZE, 0);
+		if (session_kbuf == NULL) {
+			error = ENOMEM;
+			goto fail_asid;
+		}
 		error = copyin((const void *)uls->session_vaddr, session_kbuf, uls->session_len);
 		if (error != 0) {
 			printf("%s: copyin session failed\n", __func__);
@@ -314,18 +325,19 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 		return (EINVAL);
 	}
 	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
+	printf("SVM: SEV bild ID: %d\n", ((p_status.cfges_build >> 24) & 0xFF));
 	printf("SVM: State: %d\n", p_status.state);
 	printf("SVM: Guests: %d\n", p_status.guest_count);
 
-	free(godh_kbuf, M_SVM_SEV);
-	free(session_kbuf, M_SVM_SEV);
+	contigfree(godh_kbuf, uls->dh_cert_len, M_SVM_SEV);
+	contigfree(session_kbuf, uls->session_len, M_SVM_SEV);
 	return (0);
 
 fail_buf:
 	if (godh_kbuf != NULL)
-		free(godh_kbuf, M_SVM_SEV);
+		contigfree(godh_kbuf, uls->dh_cert_len, M_SVM_SEV);
 	if (session_kbuf != NULL)
-		free(session_kbuf, M_SVM_SEV);
+		contigfree(session_kbuf, uls->session_len, M_SVM_SEV);
 
 fail_asid:
 	svm_sev_free_asid(sc->sev_asid);
@@ -364,38 +376,12 @@ svm_sev_launch_update_data(struct svm_softc *sc, struct sev_launch_update_data_v
 		g_ludata.paddr = vtophys(kva);
 		g_ludata.length = len;
 
-		/* for debug */
-		/*
-		if (out < 200) {
-			printf("[*] UPDATE_DATA GPA: 0x%lx -> KVA: %p -> HPA: 0x%lx\n",
-					gpa + offset, kva, g_ludata.paddr);
-			printf("[*] Memory Content (Before) : ");
-			for (int i = 0; i < 16; i++) {
-				printf("%02x ", ((unsigned char *)kva)[i]);
-			}
-			printf("\n");
-		}
-		*/
-		/* for debug */
-
 		error = sevops_guest_launch_update_data(&g_ludata, asp_error);
 		if (error) {
 			printf("%s: ASP hw failed at GPA 0x%lx\n", __func__, gpa + offset);
 			vm_gpa_release(cookie);
 			break;
 		}
-
-		/* for debug */
-		/*
-		if (out < 200) {
-			printf("[*] Memory Content (After) : ");
-			for (int i = 0; i < 16; i++) {
-				printf("%02x ", ((unsigned char *)kva)[i]);
-			}
-			printf("\n");
-		}
-		*/
-		/* for debug */
 
 		/* unwire the virtual memory */
 		vm_gpa_release(cookie);
@@ -415,9 +401,8 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 	lmeasure->measure_len = sizeof(lmeasure->measure) + sizeof(lmeasure->measure_nonce);
 
 	error = sevops_guest_launch_measure(lmeasure, asp_error);
-	if (error) {
+	if (error)
 		printf("%s: failed to get measurement from hardware\n", __func__);
-	}
 
 	return (error);
 }
@@ -425,16 +410,16 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 int
 svm_sev_launch_finish(struct svm_softc *sc, uint32_t *asp_error)
 {
+	int error;
 	struct sev_launch_finish g_lf;
 
 	bzero(&g_lf, sizeof(g_lf));
 	g_lf.handle = sc->handle;
-	if (sevops_guest_launch_finish(&g_lf, asp_error)) {
+	error = sevops_guest_launch_finish(&g_lf, asp_error);
+	if (error)
 		printf("%s: failed to launch finish\n", __func__);
-		return (EINVAL);
-	}
 
-	return (0);
+	return (error);
 }
 
 int

@@ -78,6 +78,9 @@
 #include <dev/vmm/vmm_mem.h>
 #include <vmmapi.h>
 
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+
 #include "acpi.h"
 #include "bhyverun.h"
 #include "bootrom.h"
@@ -727,35 +730,47 @@ do_open(const char *vmname)
 }
 
 static int
-sev_read_file(const char *path, void **buf_out, size_t *size_out)
+sev_read_file_base64(const char *filename, void **out_buf, size_t *size_out)
 {
-	int fd;
+	BIO *b64, *bfile;
 	struct stat st;
-	void *buf;
-	ssize_t n;
+	unsigned char *bin_buf;
+	int decoded_len;
 
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return (-1);
-	if (fstat(fd, &st) < 0) {
-		close(fd);
+	if (stat(filename, &st) < 0) {
+		warnx("SEV: Failed to stat '%s'", filename);
 		return (-1);
 	}
 	
-	buf = malloc(st.st_size);
-	if (buf == NULL) {
-		close(fd);
+	bin_buf = malloc(st.st_size);
+	if (bin_buf == NULL) {
+		warnx("SEV: Failed to allocate memory for '%s'", filename);
 		return (-1);
 	}
 
-	n = read(fd, buf, st.st_size);
-	close(fd);
-	if (n != st.st_size) {
-		free(buf);
+	bfile = BIO_new_file(filename, "r");
+	if (bfile == NULL) {
+		warnx("SEV: Failed to open '%s'", filename);
+		free(bin_buf);
 		return (-1);
 	}
-	*buf_out = buf;
-	*size_out = st.st_size;
+
+	b64 = BIO_new(BIO_f_base64());
+
+	BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+	bfile = BIO_push(b64, bfile);
+
+	decoded_len = BIO_read(bfile, bin_buf, st.st_size);
+	BIO_free_all(bfile);
+
+	if (decoded_len <= 0) {
+		warnx("SEV: Failed to decode base64 from '%s'", filename);
+		free(bin_buf);
+		return (-1);
+	}
+
+	*out_buf = bin_buf;
+	*size_out = (size_t)decoded_len;
 
 	return (0);
 }
@@ -934,17 +949,15 @@ main(int argc, char *argv[])
 		session_path = get_config_value("amd.sev.session");
 
 		if (godh_path != NULL && session_path != NULL) {
-			if (sev_read_file(godh_path, &godh_buf, &godh_size) != 0)
+			if (sev_read_file_base64(godh_path, &godh_buf, &godh_size) != 0)
 				errx(EX_USAGE, "failed to read GODH: %s", godh_path);
-			if (sev_read_file(session_path, &session_buf, &session_size) != 0)
-				errx(EX_USAGE, "failed to read session: %s", godh_path);
-			uls.dh_cert_vaddr	= (uint64_t)godh_buf;
-			uls.dh_cert_len		= godh_size;
-			uls.session_vaddr	= (uint64_t)session_buf;
-			uls.session_len		= session_size;
+			if (sev_read_file_base64(session_path, &session_buf, &session_size) != 0)
+				errx(EX_USAGE, "failed to read session: %s", session_path);
+			uls.dh_cert_vaddr = (uint64_t)godh_buf;
+			uls.dh_cert_len   = (uint32_t)godh_size;
+			uls.session_vaddr = (uint64_t)session_buf;
+			uls.session_len   = (uint32_t)session_size;
 			use_attestation = true;
-			printf("SEV with Legacy Attestation: GODH=%zu bytes, session=%zu bytes\n",
-					godh_size, session_size);
 		} else if (godh_path != NULL || session_path != NULL) {
 			errx(EX_USAGE, "amd.sev.godh and amd.sev.session must both be set");
 		} else {
@@ -959,7 +972,6 @@ main(int argc, char *argv[])
 			errx(EX_OSERR, "Failed to LAUNCH_START SEV");
 
 		if (use_attestation) {
-			printf("SEV guest handle: %u\n", uls.handle);
 			free(godh_buf);
 			free(session_buf);
 		}

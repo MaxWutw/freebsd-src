@@ -372,7 +372,7 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 
 	if (get_config_bool_default("amd.sev.enable", false)) {
 		bzero(&measure, sizeof(measure));
-		measure.measure_len = sizeof(measure.measure);
+		measure.measure_len = 48;
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_MEASURE;
@@ -380,11 +380,6 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 		sevcmd.error = 0;
 		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to MEASURE SEV guest");
-		printf("[+] MEASURE success! Measurement Hash:\n    ");
-		for (uint32_t i = 0; i < measure.measure_len; i++) {
-			printf("%02x", measure.measure[i]);
-		}
-		printf("\n");
 
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_FINISH;
@@ -392,8 +387,6 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 		sevcmd.error = 0;
 		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to FINISH SEV guest");
-
-		printf("SEV launch complete. VM is ready!\n");
 	}
 
 	return (0);
