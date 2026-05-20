@@ -110,6 +110,14 @@ sevops_guest_launch_measure(struct sev_launch_measure *glmeasure, uint32_t *asp_
 }
 
 int
+sevops_guest_launch_secret(struct sev_launch_secret *glsecret, uint32_t *asp_error)
+{
+	if (g_sev_ops == NULL || g_sev_ops->guest_launch_secret == NULL)
+		return (ENODEV);
+	return g_sev_ops->guest_launch_secret(glsecret, asp_error);
+}
+
+int
 sevops_guest_shutdown(struct sev_guest_shutdown_args *args, uint32_t *asp_error)
 {
 	if (g_sev_ops == NULL || g_sev_ops->guest_shutdown == NULL)

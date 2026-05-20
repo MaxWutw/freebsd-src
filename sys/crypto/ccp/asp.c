@@ -432,10 +432,15 @@ asp_send_cmd(struct asp_softc *sc, uint32_t cmd, uint64_t paddr, uint32_t *asp_r
 	/* Invalidate cache to see PSP's writes */
     // bus_dmamap_sync(sc->cmd_dma_tag, sc->cmd_dma_map, BUS_DMASYNC_POSTREAD);
 
-	*asp_ret = status;
+	/* *asp_ret = status; */
+	/* The ASP return status currently be 0 for success */
 	if (status & ASP_CMDRESP_RESPONSE) {
 		if ((status & SEV_STATUS_MASK) != SEV_STATUS_SUCCESS) {
+			*asp_ret = status;
 			return (EIO);
+		}
+		else {
+			*asp_ret = 0;
 		}
 	}
 
@@ -760,6 +765,32 @@ asp_hw_guest_launch_measure(struct asp_softc *sc, struct sev_launch_measure *glm
 }
 
 static int
+asp_hw_guest_launch_secret(struct asp_softc *sc, struct sev_launch_secret *glsecret, uint32_t *asp_ret)
+{
+	struct sev_launch_secret *lsecret;
+	int error;
+
+	mtx_lock(&sc->mtx_lock);
+
+	lsecret = (struct sev_launch_secret*)sc->cmd_kva;
+	bzero(lsecret, sizeof(struct sev_launch_secret));
+
+	lsecret->handle		= glsecret->handle;
+	lsecret->hdr_paddr 	= glsecret->hdr_paddr;
+	lsecret->hdr_length	= glsecret->hdr_length;
+	lsecret->guest_paddr = glsecret->guest_paddr;
+	lsecret->guest_length = glsecret->guest_length;
+	lsecret->trans_paddr = glsecret->trans_paddr;
+	lsecret->trans_length = glsecret->trans_length;
+
+	error = asp_send_cmd(sc, SEV_CMD_LAUNCH_UPDATE_SECRET, sc->cmd_paddr, asp_ret);
+
+	mtx_unlock(&sc->mtx_lock);
+
+	return (error);
+}
+
+static int
 asp_hw_guest_deactivate(struct asp_softc *sc, struct sev_deactivate *gdeactivate, uint32_t *asp_ret)
 {
 	struct sev_deactivate *deactivate;
@@ -895,6 +926,14 @@ sev_guest_launch_measure(struct sev_launch_measure *glmeasure, uint32_t *asp_err
 	if (g_asp_softc == NULL)
 		return (ENXIO);
 	return asp_hw_guest_launch_measure(g_asp_softc, glmeasure, asp_error);
+}
+
+static int
+sev_guest_launch_secret(struct sev_launch_secret *glsecret, uint32_t *asp_error)
+{
+	if (g_asp_softc == NULL)
+		return (ENXIO);
+	return asp_hw_guest_launch_secret(g_asp_softc, glsecret, asp_error);
 }
 
 static int
@@ -1036,6 +1075,7 @@ static struct sev_ops asp_sev_ops_impl = {
 	.guest_launch_update_data = sev_guest_launch_update_data,
 	.guest_launch_update_vmsa = sev_guest_launch_update_vmsa,
 	.guest_launch_measure = sev_guest_launch_measure,
+	.guest_launch_secret = sev_guest_launch_secret,
 	.guest_launch_finish = sev_guest_launch_finish,
 	.guest_shutdown = sev_guest_shutdown,
 	.df_flush = sev_df_flush

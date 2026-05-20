@@ -32,6 +32,12 @@
 #include <stdlib.h>
 #include <sysexits.h>
 
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <pthread.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+
 #include <vmmapi.h>
 
 #include <x86/sev.h>
@@ -346,12 +352,229 @@ bhyve_start_vcpu(struct vcpu *vcpu, bool bsp)
 	fbsdrun_addcpu(vcpu_id(vcpu));
 }
 
+static int
+sev_attestation_pause(struct vmctx *ctx, struct sev_launch_measure *sev_measure,
+					  struct sev_user_platform_status *sev_status, uint32_t sev_policy)
+{
+	const char *vm_name;
+	char sock_path[4096];
+	struct sockaddr_un addr;
+	int server_fd, client_fd;
+	unsigned char blob[48];
+	char *b64_str;
+	long b64_len;
+	char measure_b64[256];
+	BIO *b64, *mem;
+	int done = 0;
+	/* int error = 0; */
+
+	vm_name = get_config_value("name");
+	if (vm_name == NULL)
+		vm_name = "default";
+
+	snprintf(sock_path, sizeof(sock_path), "/var/run/bhyve_sev_%s.sock", vm_name);
+	unlink(sock_path);
+
+	server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (server_fd < 0) {
+		warnx("SEV socket failed");
+		return (-1);
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strlcpy(addr.sun_path, sock_path, sizeof(addr.sun_path));
+
+	if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		warnx("SEV socket bind failed: %s", sock_path);
+		close(server_fd);
+		return (-1);
+	}
+
+	if (listen(server_fd, 1) < 0) {
+		warnx("SEV socket listen failed");
+		close(server_fd);
+		unlink(sock_path);
+		return (-1);
+	}
+
+	memcpy(blob, sev_measure->measure, 32);
+	memcpy(blob + 32, sev_measure->measure_nonce, 16);
+
+	b64 = BIO_new(BIO_f_base64());
+	mem = BIO_new(BIO_s_mem());
+	BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+	b64 = BIO_push(b64, mem);
+	BIO_write(b64, blob, 48);
+	BIO_flush(b64);
+	b64_len = BIO_get_mem_data(mem, &b64_str);
+
+	snprintf(measure_b64, sizeof(measure_b64), "%.*s", (int)b64_len, b64_str);
+	BIO_free_all(b64);
+
+	printf("==== AMD SEV Attestation pause ====\n");
+
+	while (!done) {
+		FILE *client_fp;
+		char line[4096];
+
+		client_fd = accept(server_fd, NULL, NULL);
+		if (client_fd < 0) {
+			warnx("SEV accept client failed");
+			continue;
+		}
+
+		client_fp = fdopen(client_fd, "r+");
+		if (client_fp == NULL) {
+			close(client_fd);
+			continue;
+		}
+
+		fprintf(client_fp, "sev_status=paused\n");
+		fprintf(client_fp, "commands=query, secret, continue\n\n");
+		fprintf(client_fp, "$ ");
+		fflush(client_fp);
+
+		while (fgets(line, sizeof(line), client_fp) != NULL) {
+			size_t len = strlen(line);
+			while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r'))
+                line[--len] = '\0';
+
+            if (strcmp(line, "query") == 0) {
+                fprintf(client_fp, "api_major=%u\n", sev_status->api_major);
+                fprintf(client_fp, "api_minor=%u\n", sev_status->api_minor);
+                fprintf(client_fp, "build_id=%u\n", (sev_status->cfges_build >> 24) & 0xFF);
+                fprintf(client_fp, "policy=0x%x\n", sev_policy);
+                /* fprintf(client_fp, "handle=%u\n", handle); */
+                fprintf(client_fp, "state=launch-secret\n");
+                fprintf(client_fp, "launch_measure_blob=%s\n", measure_b64);
+                fprintf(client_fp, "\n");
+                fflush(client_fp);
+			} else if (strncmp(line, "secret ", 7) == 0) {
+				/* 
+				 * Format: secret <header_b64> <payload_b64> [gpa]
+				 * header and payload are base64-encoded form
+				 */
+				char hdr_b64[4096], payload_b64[8192], gpa_str[32];
+				uint64_t gpa;	
+				int nargs;
+				struct sev_user_launch_secret ulsecret;
+				struct vm_sev_cmd sevcmd;
+				void *hdr_buf = NULL, *payload_buf = NULL;
+				int hdr_size = 0, payload_size = 0;
+
+				nargs = sscanf(line + 7, "%4095s %8191s %31s", hdr_b64, payload_b64, gpa_str);
+				if (nargs < 2) {
+					fprintf(client_fp, "error=usage: secret <header_b64> <payload_b64> [gpa]\n\n");
+					fprintf(client_fp, "$ ");
+					fflush(client_fp);
+					continue;
+				}
+
+				if (nargs >= 3 && strlen(gpa_str) > 0) {
+					gpa = strtoull(gpa_str, NULL, 0);
+				} else {
+					/* 
+					 * If the gpa is not given by user, we currently use 0x810000 to be the hardcoded secret addresss.
+					 * The secret address 0x810000 was written in edk2 AmdSev OVMF.
+					 */
+					gpa = 0x810000;
+				}
+
+				/* Decode header from b64 */
+				{
+					BIO *b64d = BIO_new(BIO_f_base64());
+					BIO *memd = BIO_new_mem_buf(hdr_b64, strlen(hdr_b64));
+					BIO_set_flags(b64d, BIO_FLAGS_BASE64_NO_NL);
+					memd = BIO_push(b64d, memd);
+					hdr_buf = malloc(strlen(hdr_b64));
+					if (hdr_buf != NULL)
+						hdr_size = BIO_read(memd, hdr_buf, strlen(hdr_b64));
+					BIO_free_all(memd);
+				}
+				if (hdr_buf == NULL || hdr_size < 0) {
+					fprintf(client_fp, "error=failed to decode header base64\n");
+					fflush(client_fp);
+					free(hdr_buf);
+					continue;
+				}
+
+				/* Decode payload from b64 */
+				{
+					BIO *b64d = BIO_new(BIO_f_base64());
+					BIO *memd = BIO_new_mem_buf(payload_b64, strlen(payload_b64));
+					BIO_set_flags(b64d, BIO_FLAGS_BASE64_NO_NL);
+					memd = BIO_push(b64d, memd);
+					payload_buf = malloc(strlen(payload_b64));
+					if (payload_buf != NULL)
+						payload_size = BIO_read(memd, payload_buf, strlen(payload_b64));
+					BIO_free_all(memd);
+				}
+				if (payload_buf == NULL || payload_size < 0) {
+					fprintf(client_fp, "error=failed to decode payload base64\n");
+					fflush(client_fp);
+					free(payload_buf);
+					continue;
+				}
+				
+				printf("Injecting secret: header=%d bytes, payload=%d bytes, GPA=0x%lx\n",
+						hdr_size, payload_size, (unsigned long)gpa);
+				
+				bzero(&ulsecret, sizeof(ulsecret));
+				ulsecret.hdr_vaddr = (uint64_t)hdr_buf;
+				ulsecret.hdr_length = (uint32_t)hdr_size;
+				ulsecret.guest_gpa = gpa;
+				ulsecret.guest_length = (uint32_t)payload_size;
+				ulsecret.trans_vaddr = (uint64_t)payload_buf;
+				ulsecret.trans_length = (uint32_t)payload_size;
+
+				bzero(&sevcmd, sizeof(sevcmd));
+				sevcmd.cmd = VM_SEV_CMD_LAUNCH_SECRET;
+				sevcmd.data = &ulsecret;
+				sevcmd.error = 0;
+				if (vm_sev_command(ctx, &sevcmd) < 0) {
+					fprintf(client_fp, "error=LAUNCH_SECRET failed (errno=%d, asp_error=0x%zx)\n\n",
+							errno, sevcmd.error);
+				}
+				else {
+					fprintf(client_fp, "ok=secret injected (%d bytes at GPA 0x%lx)\n\n", 
+							payload_size, (unsigned long)gpa);
+				}
+				fflush(client_fp);
+
+				free(hdr_buf);
+				free(payload_buf);
+
+			} else if (strcmp(line, "continue") == 0) {
+				fprintf(client_fp, "ok=continuing boot\n\n");
+				fflush(client_fp);
+				done = 1;
+				break;
+			} else {
+				fprintf(client_fp, "error=unknown command\n");
+				fprintf(client_fp, "commands=query, secret, continue\n\n");
+				fflush(client_fp);
+			}
+			fprintf(client_fp, "$ ");
+			fflush(client_fp);
+		}
+		fclose(client_fp);
+	}
+
+	close(server_fd);
+	unlink(sock_path);
+	return (0);
+}
+
 int
 bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 {
 	int error;
 	struct sev_launch_measure measure;
 	struct vm_sev_cmd sevcmd;
+	struct sev_user_platform_status sev_status;
+	const char *sev_policy_str;
+	uint32_t sev_policy;
 
 	error = init_msr();
 	if (error != 0)
@@ -374,6 +597,7 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 		bzero(&measure, sizeof(measure));
 		measure.measure_len = 48;
 
+		/* SEV LAUNCH_MEASURE */
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_MEASURE;
 		sevcmd.data = &measure;
@@ -381,6 +605,25 @@ bhyve_init_platform(struct vmctx *ctx, struct vcpu *bsp __unused)
 		if (vm_sev_command(ctx, &sevcmd) < 0)
 			errx(EX_OSERR, "Failed to MEASURE SEV guest");
 
+		/* Attestation pause with socket */
+		if (get_config_bool_default("amd.sev.pause", false)) {
+			sev_policy_str = get_config_value("amd.sev.policy");
+			// If the sev_policy is not provided, we use 0x3b directly.
+			sev_policy = sev_policy_str ? (uint32_t)strtoul(sev_policy_str, NULL, 0) : 0x3b;
+
+			bzero(&sev_status, sizeof(sev_status));
+			bzero(&sevcmd, sizeof(sevcmd));
+			sevcmd.cmd = VM_SEV_CMD_PLATFORM_STATUS;
+			sevcmd.data = &sev_status;
+			sevcmd.error = 0;
+			
+			if (vm_sev_command(ctx, &sevcmd) < 0)
+				errx(EX_OSERR, "Failed to get SEV platform status");
+
+			sev_attestation_pause(ctx, &measure, &sev_status, sev_policy);
+		}
+
+		/* SEV LAUNCH_FINISH */
 		bzero(&sevcmd, sizeof(sevcmd));
 		sevcmd.cmd = VM_SEV_CMD_LAUNCH_FINISH;
 		sevcmd.data = NULL;

@@ -13,6 +13,7 @@ struct sev_launch_start;
 struct sev_launch_update_data;
 struct sev_launch_update_vmsa;
 struct sev_launch_measure;
+struct sev_launch_secret;
 struct sev_launch_finish;
 struct sev_activate;
 struct sev_guest_shutdown_args;
@@ -28,6 +29,7 @@ DECLARE_SEVOPS_FUNC(int, guest_launch_update_data, (struct sev_launch_update_dat
 // LAUNCH_UPDATE_DATA is for SEV-ES, is still work in progress
 DECLARE_SEVOPS_FUNC(int, guest_launch_update_vmsa, (struct sev_launch_update_vmsa *, uint32_t *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_measure, (struct sev_launch_measure *, uint32_t *));
+DECLARE_SEVOPS_FUNC(int, guest_launch_secret, (struct sev_launch_secret *, uint32_t *));
 DECLARE_SEVOPS_FUNC(int, guest_launch_finish, (struct sev_launch_finish *, uint32_t *));
 DECLARE_SEVOPS_FUNC(int, guest_shutdown, (struct sev_guest_shutdown_args *, uint32_t *));
 DECLARE_SEVOPS_FUNC(int, df_flush, (uint32_t *));
@@ -173,6 +175,36 @@ struct sev_guest_shutdown_args {
 	uint32_t handle;
 } __packed;
 
+struct sev_launch_secret_header {
+	uint32_t flags;		/* In */
+	uint8_t iv[16]; 	/* In */
+	uint8_t mac[32];	/* In */
+} __packed;
+
+struct sev_launch_secret {
+	uint32_t handle;		/* In */
+	uint32_t reserved0;		/* - */
+	uint64_t hdr_paddr;		/* In */
+	uint32_t hdr_length;	/* In */
+	uint32_t reserved1;		/* - */
+	uint64_t guest_paddr;	/* In */
+	uint32_t guest_length;	/* In */
+	uint32_t reserved2;		/* - */
+	uint64_t trans_paddr;	/* In */
+	uint32_t trans_length;	/* In */
+} __packed;
+
+struct sev_user_launch_secret {
+	uint64_t hdr_vaddr;		/* In */
+	uint32_t hdr_length;	/* In */
+	uint32_t reserved0;		/* In */
+	uint64_t guest_gpa;		/* In */
+	uint32_t guest_length;	/* In */
+	uint32_t reserved1;		/* - */
+	uint64_t trans_vaddr;	/* In */
+	uint32_t trans_length;	/* In */
+};
+
 struct sev_ops {
 	/* ASP hardware */
 	sevops_asp_wbinvd_t		asp_wbinvd;
@@ -189,6 +221,7 @@ struct sev_ops {
 	sevops_guest_launch_update_data_t 	guest_launch_update_data;
 	sevops_guest_launch_update_vmsa_t	guest_launch_update_vmsa;
 	sevops_guest_launch_measure_t		guest_launch_measure;
+	sevops_guest_launch_secret_t		guest_launch_secret;
 	sevops_guest_launch_finish_t		guest_launch_finish;
 	sevops_guest_shutdown_t				guest_shutdown;
 

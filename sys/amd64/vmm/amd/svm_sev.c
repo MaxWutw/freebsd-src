@@ -159,6 +159,32 @@ svm_sev_activate(struct svm_softc *sc, uint32_t *asp_error)
 }
 
 int
+svm_sev_platform_status(struct svm_softc *sc, struct sev_user_platform_status *upstatus, uint32_t *asp_error)
+{
+	struct sev_platform_status	p_status;
+	int error = 0;
+
+	bzero(&p_status, sizeof(p_status));
+	error = sevops_platform_status(&p_status, asp_error);
+	if (error != 0) {
+		printf("%s: failed to get sev platform status\n", __func__);
+		return (EINVAL);
+	}
+
+	upstatus->api_major = p_status.api_major;
+	upstatus->api_minor = p_status.api_minor;
+	upstatus->state = p_status.state;
+	upstatus->owner = p_status.owner;
+	upstatus->cfges_build = p_status.cfges_build;
+	upstatus->guest_count = p_status.guest_count;
+
+	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
+	printf("SVM: State: %d\n", p_status.state);
+	printf("SVM: Guests: %d\n", p_status.guest_count);
+	return (error);
+}
+
+int
 svm_sev_launch_start(struct svm_softc *sc, uint32_t *asp_error)
 {
 	struct sev_platform_status	p_status;
@@ -324,10 +350,6 @@ svm_sev_launch_start_with_session(struct svm_softc *sc, struct sev_user_launch_s
 		printf("%s: failed to get sev platform status\n", __func__);
 		return (EINVAL);
 	}
-	printf("SVM: SEV API version: %d.%d\n", p_status.api_major, p_status.api_minor);
-	printf("SVM: SEV bild ID: %d\n", ((p_status.cfges_build >> 24) & 0xFF));
-	printf("SVM: State: %d\n", p_status.state);
-	printf("SVM: Guests: %d\n", p_status.guest_count);
 
 	contigfree(godh_kbuf, uls->dh_cert_len, M_SVM_SEV);
 	contigfree(session_kbuf, uls->session_len, M_SVM_SEV);
@@ -403,6 +425,91 @@ svm_sev_launch_measure(struct svm_softc *sc, struct sev_launch_measure *lmeasure
 	error = sevops_guest_launch_measure(lmeasure, asp_error);
 	if (error)
 		printf("%s: failed to get measurement from hardware\n", __func__);
+
+	return (error);
+}
+
+int
+svm_sev_launch_secret(struct svm_softc *sc, struct sev_user_launch_secret *ulsecret, uint32_t *asp_error)
+{
+	struct sev_launch_secret g_lsecret;
+	void *hdr_kbuf = NULL, *trans_kbuf = NULL;
+	void *guest_kva, *cookie;
+	int error;
+
+	// Must be 16 B aligned.
+	if ((ulsecret->guest_gpa & 0xf) != 0) {
+		printf("%s: guest GPA 0x%lx not 16-byte aligned\n", 
+				__func__, (unsigned long)ulsecret->guest_gpa);
+		return (EINVAL);
+	}
+	// Must be a multiple of 16 B and no more than 16 kB.
+	if ((ulsecret->guest_length & 0xf) != 0 || ulsecret->guest_length > 16384) {
+		printf("%s: invalid guest len %u\n\n", 
+				__func__, ulsecret->guest_length);
+		return (EINVAL);
+	}
+
+	hdr_kbuf = contigmalloc(ulsecret->hdr_length, M_SVM_SEV, M_WAITOK | M_ZERO, 
+			0, 0xffffffff, PAGE_SIZE, 0);
+	if (hdr_kbuf == NULL)
+		return (ENOMEM);
+	error = copyin((const void *)ulsecret->hdr_vaddr, hdr_kbuf, ulsecret->hdr_length);
+	if (error) {
+		printf("%s: copyin header failed\n", __func__);
+		goto fail;
+	}
+
+	trans_kbuf = contigmalloc(ulsecret->trans_length, M_SVM_SEV, M_WAITOK | M_ZERO, 
+			0, 0xffffffff, PAGE_SIZE, 0);
+	if (trans_kbuf == NULL) {
+		error = ENOMEM;
+		goto fail;
+	}
+	error = copyin((const void *)ulsecret->trans_vaddr, trans_kbuf, ulsecret->trans_length);
+	if (error) {
+		printf("%s: copyin transport failed\n", __func__);
+		goto fail;
+	}
+	
+	guest_kva = vm_gpa_hold_global(sc->vm, ulsecret->guest_gpa, ulsecret->guest_length,
+			VM_PROT_READ | VM_PROT_WRITE, &cookie);
+	if (guest_kva == NULL) {
+		printf("%s: failed to hold gpa 0x%lx\n", 
+				__func__, (unsigned long)ulsecret->guest_gpa);
+		error = EFAULT;
+		goto fail;
+	}
+
+	bzero(&g_lsecret, sizeof(g_lsecret));
+	g_lsecret.handle = sc->handle;
+	g_lsecret.hdr_paddr = vtophys(hdr_kbuf);
+	g_lsecret.hdr_length = ulsecret->hdr_length;
+	g_lsecret.guest_paddr = vtophys(guest_kva);
+	g_lsecret.guest_length = ulsecret->guest_length;
+	g_lsecret.trans_paddr = vtophys(trans_kbuf);
+	g_lsecret.trans_length = ulsecret->trans_length;
+
+	printf("%s: hdr_paddr=0x%lx hdr_len=%u\n", __func__,
+           (unsigned long)g_lsecret.hdr_paddr, g_lsecret.hdr_length);
+    printf("%s: guest_paddr=0x%lx guest_len=%u\n", __func__,
+           (unsigned long)g_lsecret.guest_paddr, g_lsecret.guest_length);
+    printf("%s: trans_paddr=0x%lx trans_len=%u\n", __func__,
+           (unsigned long)g_lsecret.trans_paddr, g_lsecret.trans_length);
+
+	error = sevops_guest_launch_secret(&g_lsecret, asp_error);
+	if (error) {
+		printf("%s: LAUNCH_SECRET failed (error: %d, asp_error: 0x%x)\n", 
+				__func__, error, *asp_error);
+	}
+
+	vm_gpa_release(cookie);
+
+fail:
+	if (hdr_kbuf != NULL)
+		contigfree(hdr_kbuf, ulsecret->hdr_length, M_SVM_SEV);
+	if (trans_kbuf != NULL)
+		contigfree(trans_kbuf, ulsecret->trans_length, M_SVM_SEV);
 
 	return (error);
 }
