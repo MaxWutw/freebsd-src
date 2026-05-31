@@ -2900,6 +2900,11 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 	struct svm_softc *sc = vmi;
 	int error = 0;
 	int asp_error = 0;
+	struct sev_user_platform_status pstatus;
+	struct sev_user_launch_start uls;
+	struct sev_launch_update_data_vm udata_vm;
+	struct sev_launch_measure lmeasure;
+	struct sev_user_launch_secret ulsecret;
 
 	switch(sevcmd->cmd) {
 	case VM_SEV_CMD_INIT:
@@ -2907,8 +2912,6 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_PLATFORM_STATUS:
-		struct sev_user_platform_status pstatus;
-
 		error = svm_sev_platform_status(sc, &pstatus, &asp_error);
 		if (error == 0 && asp_error == 0){
 			printf("copyout platform status\n");
@@ -2917,8 +2920,6 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_LAUNCH_START:
-		struct sev_user_launch_start uls;
-
 		/* Without provide GODH and session binary file */
 		if (sevcmd->data == NULL) {
 			error = svm_sev_launch_start(sc, &asp_error);
@@ -2933,23 +2934,18 @@ svm_sev_enc_mem(void *vmi, struct vm_sev_cmd *sevcmd)
 		break;
 
 	case VM_SEV_CMD_LAUNCH_UPDATE_DATA:
-		struct sev_launch_update_data_vm udata_vm;
-
 		error = copyin(sevcmd->data, &udata_vm, sizeof(udata_vm));
 		if (error == 0)
 			error = svm_sev_launch_update_data(sc, &udata_vm, &asp_error);
 		break;
 
 	case VM_SEV_CMD_LAUNCH_MEASURE:
-		struct sev_launch_measure lmeasure;
-
 		error = svm_sev_launch_measure(sc, &lmeasure, &asp_error);
 		if (error == 0 && asp_error == 0)
 			error = copyout(&lmeasure, sevcmd->data, sizeof(lmeasure));
 		break;
 
 	case VM_SEV_CMD_LAUNCH_SECRET:
-		struct sev_user_launch_secret ulsecret;
 
 		error = copyin(sevcmd->data, &ulsecret, sizeof(ulsecret));
 		if (error == 0)
