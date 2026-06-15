@@ -1999,18 +1999,36 @@ svm_pmap_activate(struct svm_vcpu *vcpu, pmap_t pmap)
 	 */
 	if (sc->sev_enable) {
 		ctrl->asid = sc->sev_asid;
+		vcpu->asid.num = sc->sev_asid;
 		ctrl->sev_enable = 1;
-		
+
 		eptgen = atomic_load_long(&pmap->pm_eptgen);
 		ctrl->tlb_ctrl = VMCB_TLB_FLUSH_NOTHING;
 
-		if (vcpu->eptgen != eptgen) {
-			/* 
-			 * Currently we assume all the AMD SEV 
-			 * supported machine are supports FlushByAsid.
-			 */
+		/*
+		 * Nested-TLB entries are per physical CPU, but 'eptgen' is
+		 * tracked per vcpu. Flushing only on an eptgen mismatch can
+		 * therefore leave stale TLB entries for this static SEV ASID on
+		 * a physical CPU the vcpu ran on earlier: after migrating away
+		 * (and flushing the new CPU) vcpu->eptgen is up to date, so on
+		 * returning to the old CPU no flush happens even though that
+		 * CPU's TLB is stale -> the guest gets wrong GPA->HPA mappings
+		 * and silently corrupts memory.
+		 *
+		 * Flush this ASID's TLB when either:
+		 *   - the nested page tables changed (eptgen mismatch), or
+		 *   - the vcpu migrated to a different physical CPU. svm_run()
+		 *     resets vcpu->asid.gen to 0 on migration, and the SEV path
+		 *     does not otherwise use the per-CPU ASID generations, so a
+		 *     zero gen is our migration signal here.
+		 *
+		 * But currently it will flush whenever vcpu migrate, therefore
+		 * it still be optimized.
+		 */
+		if (vcpu->eptgen != eptgen || vcpu->asid.gen == 0) {
 			ctrl->tlb_ctrl = VMCB_TLB_FLUSH_GUEST;
 		}
+		vcpu->asid.gen = 1;
 		svm_set_dirty(vcpu, VMCB_CACHE_ASID | VMCB_CACHE_NP);
 	}
 	else {
